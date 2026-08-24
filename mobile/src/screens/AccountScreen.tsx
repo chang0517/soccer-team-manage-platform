@@ -9,11 +9,15 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError } from "../api/client";
 import { colors } from "../theme";
+import type { AppStackParamList } from "../navigation/types";
 
 export default function AccountScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { user, logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -54,13 +58,24 @@ export default function AccountScreen() {
         </Text>
       </View>
 
+      <View style={styles.card}>
+        <Pressable onPress={() => navigation.navigate("Members")}>
+          <Text style={styles.linkRow}>👥 멤버 (선수 명단) →</Text>
+        </Pressable>
+      </View>
+
       {user?.role === "admin" && (
         <View style={[styles.card, styles.adminCard]}>
           <Text style={styles.adminTitle}>운영진</Text>
-          <Text style={styles.mutedText}>
-            가입 승인·역대 기록 관리 등 운영진 기능은 아직 앱에서 지원하지 않아요. 웹
-            버전에서 이용해 주세요.
-          </Text>
+          <Pressable onPress={() => navigation.navigate("Admin")}>
+            <Text style={styles.linkRow}>가입 승인 관리 →</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate("Fines")}>
+            <Text style={styles.linkRow}>이번 달 미투표자 →</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate("HistoricalStats")}>
+            <Text style={styles.linkRow}>역대 기록 관리 →</Text>
+          </Pressable>
         </View>
       )}
 
@@ -120,8 +135,9 @@ const styles = StyleSheet.create({
   },
   teamName: { fontSize: 16, fontWeight: "800", color: colors.text },
   mutedText: { fontSize: 12, color: colors.textMuted },
-  adminCard: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" },
-  adminTitle: { fontSize: 13, fontWeight: "700", color: colors.primary, marginBottom: 4 },
+  adminCard: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe", gap: 8 },
+  adminTitle: { fontSize: 13, fontWeight: "700", color: colors.primary, marginBottom: 2 },
+  linkRow: { fontSize: 13, fontWeight: "700", color: colors.primaryLight },
   sectionTitle: { fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 4 },
   label: { fontSize: 12, fontWeight: "600", color: colors.textMuted, marginTop: 10 },
   input: {

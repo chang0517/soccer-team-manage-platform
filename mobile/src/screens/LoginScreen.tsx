@@ -74,6 +74,14 @@ export default function LoginScreen({ navigation }: Props) {
           )}
         </Pressable>
       </View>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 12 }}>
+        <Pressable onPress={() => navigation.navigate("FindId")}>
+          <Text style={styles.link}>아이디 찾기</Text>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate("ResetPassword")}>
+          <Text style={styles.link}>비밀번호 찾기</Text>
+        </Pressable>
+      </View>
       <Pressable onPress={() => navigation.navigate("Signup")}>
         <Text style={styles.link}>계정이 없나요? 가입하기</Text>
       </Pressable>

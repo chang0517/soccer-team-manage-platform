@@ -18,6 +18,8 @@ export interface SessionUser {
 
 export type PosGroup = "GK" | "CB" | "WB" | "DM" | "AM" | "WG" | "ST";
 
+export type PosCategory = "ATT" | "MID" | "DEF";
+
 export interface Member {
   id: number;
   name: string;
@@ -54,6 +56,17 @@ export interface SquadData {
   approvedBy?: number[];
 }
 
+export interface QuarterGoalEntry {
+  scorerId: number | null;
+  assistId: number | null;
+}
+
+export interface QuarterRecordEntry {
+  scored: number | null;
+  conceded: number | null;
+  goals: QuarterGoalEntry[];
+}
+
 export interface EventItem {
   id: number;
   title: string;
@@ -65,7 +78,27 @@ export interface EventItem {
   scored: number | null;
   conceded: number | null;
   notes: string;
+  dutyOffense: string;
+  dutyDefense: string;
+  waterDuty: string;
+  iceboxDuty: string;
+  recordLog: QuarterRecordEntry[] | null;
   squad: SquadData | null;
+}
+
+export interface RecordRow {
+  eventId: number;
+  memberId: number;
+  played: number;
+  goals: number;
+  assists: number;
+  position: PosGroup | "";
+}
+
+export interface MvpVoteRow {
+  eventId: number;
+  voterId: number;
+  voteeId: number;
 }
 
 export interface CommentRow {
@@ -125,4 +158,48 @@ export interface RankingRow {
   total: number;
   streak: number;
   streakType: "goal" | "assist" | null;
+}
+
+export interface AppUser {
+  id: number;
+  teamId: number;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  status: UserStatus;
+  memberId: number | null;
+  createdAt: string;
+  draftPos1: PosGroup | null;
+  draftPos2: PosGroup | null;
+  draftBackNo: number | null;
+  draftPhone: string | null;
+}
+
+export interface HistoricalStats {
+  memberId: number;
+  games: number;
+  goals: number;
+  assists: number;
+  cleanPts: number;
+  bonusPts: number;
+}
+
+export interface HallOfFameRow {
+  id: number;
+  year: number;
+  captainId: number | null;
+  viceCaptainId: number | null;
+  managerId: number | null;
+  topScorerId: number | null;
+  topAssistId: number | null;
+  cleanSheetFirstId: number | null;
+  overallFirstId: number | null;
+}
+
+export interface FineNotice {
+  memberId: number;
+  name: string;
+  phone: string | null;
+  missedEvents: { id: number; title: string; date: string }[];
+  message: string;
 }
