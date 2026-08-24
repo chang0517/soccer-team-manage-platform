@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "./useSession";
@@ -40,11 +39,11 @@ export default function Nav() {
       <header className="no-print sticky top-0 z-20 border-b border-zinc-200 bg-blue-900 text-white">
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
-            <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full ring-1 ring-white/30">
-              <Image src="/logo.png" alt="Raven FC" fill sizes="32px" className="scale-110 object-cover" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-800 text-base ring-1 ring-white/30">
+              ⚽
             </span>
             <span className="text-lg font-extrabold tracking-wide">
-              RAVEN FC
+              {user?.teamName || "TEAM MANAGE"}
             </span>
           </Link>
           <div className="flex items-center gap-3">

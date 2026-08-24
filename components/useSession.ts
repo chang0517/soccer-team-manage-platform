@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SessionUser } from "@/lib/types";
 
+type MeUser = SessionUser & { teamName: string };
+
 export function useSession() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const [user, setUser] = useState<MeUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {

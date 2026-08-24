@@ -1,7 +1,7 @@
 {
-  "name": "Raven FC",
-  "short_name": "Raven FC",
-  "description": "Raven FC 일정·스쿼드·기록 관리",
+  "name": "Team Manage",
+  "short_name": "Team Manage",
+  "description": "팀 일정·스쿼드·기록 관리",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fafafa",
