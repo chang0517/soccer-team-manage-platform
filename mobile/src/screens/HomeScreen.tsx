@@ -1,8 +1,10 @@
 import { useCallback, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -13,6 +15,9 @@ import { useAuth } from "../auth/AuthContext";
 import { api, ApiError } from "../api/client";
 import type { EventItem } from "../api/types";
 import { colors } from "../theme";
+import type { AppStackParamList, MainTabParamList } from "../navigation/types";
+
+type Nav = NativeStackNavigationProp<AppStackParamList & MainTabParamList>;
 
 function eventLine(e: EventItem): string {
   const parts = [e.date];
@@ -23,7 +28,8 @@ function eventLine(e: EventItem): string {
 }
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const navigation = useNavigation<Nav>();
+  const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,12 +60,21 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.teamName}>{user?.teamName ?? "팀"}</Text>
-          <Text style={styles.greeting}>{user?.displayName}님, 안녕하세요</Text>
+        <View style={styles.headerLeft}>
+          {user?.teamLogoUrl ? (
+            <Image source={{ uri: user.teamLogoUrl }} style={styles.logo} />
+          ) : (
+            <View style={styles.logoFallback}>
+              <Text style={{ fontSize: 16 }}>⚽</Text>
+            </View>
+          )}
+          <View>
+            <Text style={styles.teamName}>{user?.teamName ?? "팀"}</Text>
+            <Text style={styles.greeting}>{user?.displayName}님, 안녕하세요</Text>
+          </View>
         </View>
-        <Pressable onPress={logout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>로그아웃</Text>
+        <Pressable onPress={() => navigation.navigate("Account")} style={styles.settingsBtn}>
+          <Text style={{ fontSize: 16 }}>⚙️</Text>
         </Pressable>
       </View>
 
@@ -75,12 +90,15 @@ export default function HomeScreen() {
           ListHeaderComponent={<Text style={styles.sectionTitle}>다가오는 일정</Text>}
           ListEmptyComponent={<Text style={styles.empty}>예정된 일정이 없어요.</Text>}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <Pressable
+              style={styles.card}
+              onPress={() => navigation.navigate("EventDetail", { eventId: item.id })}
+            >
               <Text style={styles.cardTitle}>
                 {item.type === "match" ? "⚽" : "🤝"} {item.title}
               </Text>
               <Text style={styles.cardSub}>{eventLine(item)}</Text>
-            </View>
+            </Pressable>
           )}
           contentContainerStyle={{ padding: 16, gap: 10 }}
         />
@@ -100,15 +118,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logo: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff" },
+  logoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   teamName: { color: "#fff", fontSize: 18, fontWeight: "800" },
   greeting: { color: "#dbeafe", fontSize: 12, marginTop: 2 },
-  logoutBtn: {
+  settingsBtn: {
     backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  logoutText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   sectionTitle: { fontSize: 14, fontWeight: "700", color: colors.textMuted, marginBottom: 4 },
   card: {
     backgroundColor: colors.card,

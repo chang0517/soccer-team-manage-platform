@@ -9,6 +9,7 @@ export interface SessionUser {
   id: number;
   teamId: number;
   teamName: string;
+  teamLogoUrl: string | null;
   username: string;
   displayName: string;
   role: UserRole;
@@ -35,6 +36,24 @@ export interface VoteRow {
   status: VoteStatus;
 }
 
+export interface SquadSlotAssign {
+  slotId: string;
+  memberId: number | null;
+  memberId2?: number | null;
+}
+
+export interface QuarterSquad {
+  starters: SquadSlotAssign[];
+  bench: number[];
+}
+
+export interface SquadData {
+  quarters: QuarterSquad[];
+  generatedAt: string;
+  confirmed?: boolean;
+  approvedBy?: number[];
+}
+
 export interface EventItem {
   id: number;
   title: string;
@@ -46,6 +65,15 @@ export interface EventItem {
   scored: number | null;
   conceded: number | null;
   notes: string;
+  squad: SquadData | null;
+}
+
+export interface CommentRow {
+  id: number;
+  eventId: number;
+  memberId: number;
+  body: string;
+  createdAt: string;
 }
 
 export type AnnouncementCategory = "notice" | "coach_feedback";

@@ -1,11 +1,22 @@
 import { useCallback, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { api, ApiError } from "../api/client";
 import type { EventItem } from "../api/types";
 import { colors } from "../theme";
+import type { AppStackParamList } from "../navigation/types";
 
 export default function ScheduleScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,7 +63,10 @@ export default function ScheduleScreen() {
       contentContainerStyle={{ padding: 16, gap: 10 }}
       ListEmptyComponent={<Text style={styles.empty}>등록된 일정이 없어요.</Text>}
       renderItem={({ item }) => (
-        <View style={styles.card}>
+        <Pressable
+          style={styles.card}
+          onPress={() => navigation.navigate("EventDetail", { eventId: item.id })}
+        >
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>
               {item.type === "match" ? "⚽" : "🤝"} {item.title}
@@ -67,7 +81,7 @@ export default function ScheduleScreen() {
             {item.date} {item.time} {item.opponent ? `· vs ${item.opponent}` : ""}
           </Text>
           {item.location ? <Text style={styles.cardSub}>@ {item.location}</Text> : null}
-        </View>
+        </Pressable>
       )}
     />
   );

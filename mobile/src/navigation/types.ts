@@ -11,3 +11,9 @@ export type MainTabParamList = {
   Polls: undefined;
   Ranking: undefined;
 };
+
+export type AppStackParamList = {
+  MainTabs: undefined;
+  EventDetail: { eventId: number };
+  Account: undefined;
+};
