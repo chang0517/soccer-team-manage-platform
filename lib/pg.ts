@@ -57,6 +57,7 @@ async function init() {
       id SERIAL PRIMARY KEY,
       slug TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
+      logo_url TEXT,
       fine_account TEXT NOT NULL DEFAULT '',
       fine_amount TEXT NOT NULL DEFAULT '20,000원',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -242,6 +243,7 @@ type TeamDbRow = {
   id: number;
   slug: string;
   name: string;
+  logo_url: string | null;
   fine_account: string;
   fine_amount: string;
   created_at: string;
@@ -252,6 +254,7 @@ function toTeam(r: TeamDbRow): TeamRow {
     id: r.id,
     slug: r.slug,
     name: r.name,
+    logoUrl: r.logo_url,
     fineAccount: r.fine_account,
     fineAmount: r.fine_amount,
     createdAt: r.created_at,
@@ -297,6 +300,11 @@ export async function updateTeamFineSettings(
     patch.fineAmount ?? cur.fineAmount,
     teamId,
   ]);
+}
+
+export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
+  const pool = await ready();
+  await pool.query("UPDATE teams SET logo_url=$1 WHERE id=$2", [logoUrl, teamId]);
 }
 
 // ---------- members ----------

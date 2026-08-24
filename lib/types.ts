@@ -5,6 +5,11 @@ export interface TeamRow {
   id: number;
   slug: string;
   name: string;
+  // 팀 로고. data: URI(base64)를 그대로 저장한다 — 팀당 1장짜리 작은
+  // 이미지라 별도 오브젝트 스토리지 없이 DB 컬럼으로 충분하다고 판단.
+  // 팀 수가 많아지거나 이미지가 커지면 Supabase Storage 같은 곳으로
+  // 옮기는 게 맞다(그때는 CDN 캐싱도 챙길 수 있음).
+  logoUrl: string | null;
   fineAccount: string;
   fineAmount: string;
   createdAt: string;

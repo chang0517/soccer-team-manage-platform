@@ -21,6 +21,7 @@ export async function GET() {
       id: user.id,
       teamId: user.teamId,
       teamName: team?.name ?? "",
+      teamLogoUrl: team?.logoUrl ?? null,
       username: user.username,
       displayName: user.displayName,
       role: user.role,

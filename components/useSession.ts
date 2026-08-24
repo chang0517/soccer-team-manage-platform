@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SessionUser } from "@/lib/types";
 
-type MeUser = SessionUser & { teamName: string };
+type MeUser = SessionUser & { teamName: string; teamLogoUrl: string | null };
 
 export function useSession() {
   const [user, setUser] = useState<MeUser | null>(null);

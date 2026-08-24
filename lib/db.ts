@@ -49,6 +49,9 @@ export async function updateTeamFineSettings(
     ? pg.updateTeamFineSettings(teamId, patch)
     : sqlite.updateTeamFineSettings(teamId, patch);
 }
+export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
+  return usePg ? pg.updateTeamLogo(teamId, logoUrl) : sqlite.updateTeamLogo(teamId, logoUrl);
+}
 
 export async function listMembers(teamId: number): Promise<Member[]> {
   return usePg ? pg.listMembers(teamId) : sqlite.listMembers(teamId);

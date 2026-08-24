@@ -41,6 +41,7 @@ function createDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
+      logo_url TEXT,
       fine_account TEXT NOT NULL DEFAULT '',
       fine_amount TEXT NOT NULL DEFAULT '20,000원',
       created_at TEXT NOT NULL
@@ -226,6 +227,7 @@ type TeamDbRow = {
   id: number;
   slug: string;
   name: string;
+  logo_url: string | null;
   fine_account: string;
   fine_amount: string;
   created_at: string;
@@ -236,6 +238,7 @@ function toTeam(r: TeamDbRow): TeamRow {
     id: r.id,
     slug: r.slug,
     name: r.name,
+    logoUrl: r.logo_url,
     fineAccount: r.fine_account,
     fineAmount: r.fine_amount,
     createdAt: r.created_at,
@@ -278,6 +281,10 @@ export function updateTeamFineSettings(
   getDb()
     .prepare("UPDATE teams SET fine_account=?, fine_amount=? WHERE id=?")
     .run(patch.fineAccount ?? cur.fineAccount, patch.fineAmount ?? cur.fineAmount, teamId);
+}
+
+export function updateTeamLogo(teamId: number, logoUrl: string | null) {
+  getDb().prepare("UPDATE teams SET logo_url=? WHERE id=?").run(logoUrl, teamId);
 }
 
 // ---------- members ----------

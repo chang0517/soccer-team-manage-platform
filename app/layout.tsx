@@ -14,16 +14,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const session = await getSessionUser();
   const team = session ? await getTeamById(session.teamId) : null;
   const name = team?.name ?? DEFAULT_NAME;
+  // 팀 로고가 있으면 브라우저 탭 아이콘도 그걸로 — generateMetadata는
+  // 요청마다 다시 실행되니 data: URI를 그대로 넣어도 된다. 다만 홈 화면에
+  // "설치"하는 PWA 아이콘(manifest.webmanifest)은 정적 파일이라 이건
+  // 여전히 범용 아이콘으로 고정된다.
+  const icon = team?.logoUrl || "/favicon-32.png";
   return {
     title: name,
     description: `${name} 일정·스쿼드·기록 관리`,
     manifest: "/manifest.webmanifest",
     icons: {
-      icon: [
-        { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      ],
-      apple: "/apple-touch-icon.png",
+      icon: [{ url: icon }],
+      apple: team?.logoUrl || "/apple-touch-icon.png",
     },
     appleWebApp: {
       capable: true,
