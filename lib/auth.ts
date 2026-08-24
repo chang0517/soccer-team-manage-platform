@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getUserById } from "./db";
 import type { SessionUser } from "./types";
 
@@ -54,9 +54,19 @@ export function parseSessionToken(token: string | undefined | null): SessionUser
   }
 }
 
+// 웹은 httpOnly 쿠키로 세션을 들고 다니지만, 네이티브 앱은 브라우저 쿠키
+// 저장소가 없어서 로그인 응답에 같이 내려준 토큰을 자체 보관했다가
+// Authorization: Bearer 헤더로 보낸다. 서명·만료 검증 로직은 완전히
+// 동일하므로(parseSessionToken 재사용) 같은 토큰이 양쪽에서 다 통한다.
 export async function getSessionUser(): Promise<SessionUser | null> {
   const store = await cookies();
-  return parseSessionToken(store.get(SESSION_COOKIE)?.value);
+  const cookieUser = parseSessionToken(store.get(SESSION_COOKIE)?.value);
+  if (cookieUser) return cookieUser;
+
+  const hdrs = await headers();
+  const auth = hdrs.get("authorization") ?? "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  return parseSessionToken(bearer);
 }
 
 export async function setSessionCookie(user: SessionUser) {

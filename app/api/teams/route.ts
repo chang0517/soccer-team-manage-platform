@@ -1,4 +1,4 @@
-import { hashPassword, setSessionCookie } from "@/lib/auth";
+import { createSessionToken, hashPassword, setSessionCookie } from "@/lib/auth";
 import { createTeam, createUser, getTeamBySlug } from "@/lib/db";
 
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
@@ -48,14 +48,18 @@ export async function POST(request: Request) {
     memberId: null,
   });
 
-  await setSessionCookie({
+  const sessionUser = {
     id: user.id,
     teamId: user.teamId,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
     memberId: user.memberId,
-  });
+  };
+  await setSessionCookie(sessionUser);
 
-  return Response.json({ ok: true, teamSlug: team.slug }, { status: 201 });
+  return Response.json(
+    { ok: true, teamSlug: team.slug, token: createSessionToken(sessionUser) },
+    { status: 201 }
+  );
 }

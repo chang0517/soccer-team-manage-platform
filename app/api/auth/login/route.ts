@@ -1,4 +1,4 @@
-import { setSessionCookie, verifyPassword } from "@/lib/auth";
+import { createSessionToken, setSessionCookie, verifyPassword } from "@/lib/auth";
 import { getTeamBySlug, getUserByUsername } from "@/lib/db";
 
 export async function POST(request: Request) {
@@ -29,20 +29,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "가입이 거절됐어요." }, { status: 403 });
   }
 
-  await setSessionCookie({
+  const sessionUser = {
     id: user.id,
     teamId: user.teamId,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
     memberId: user.memberId,
-  });
-  return Response.json({
-    id: user.id,
-    teamId: user.teamId,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    memberId: user.memberId,
-  });
+  };
+  await setSessionCookie(sessionUser);
+  // 웹은 위 httpOnly 쿠키를 쓰고, 네이티브 앱은 쿠키 저장소가 없어서
+  // 이 token을 직접 저장했다가 Authorization: Bearer로 보낸다.
+  return Response.json({ ...sessionUser, token: createSessionToken(sessionUser) });
 }
