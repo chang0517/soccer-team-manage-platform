@@ -1,24 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [teamSlug, setTeamSlug] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
+  }, []);
+
   const submit = async () => {
-    if (!username.trim() || !password) return;
+    if (!teamSlug.trim() || !username.trim() || !password) return;
     setLoading(true);
     setError("");
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username.trim(), password }),
+      body: JSON.stringify({
+        teamSlug: teamSlug.trim(),
+        username: username.trim(),
+        password,
+      }),
     });
     const data = await res.json();
     setLoading(false);
@@ -26,6 +36,7 @@ export default function LoginPage() {
       setError(data.error || "로그인에 실패했어요.");
       return;
     }
+    localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
     router.push("/");
     router.refresh();
   };
@@ -37,6 +48,16 @@ export default function LoginPage() {
     <div className="mx-auto max-w-sm space-y-4 pt-10">
       <h1 className="text-center text-lg font-bold">로그인</h1>
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div>
+          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
+          <input
+            className={input}
+            value={teamSlug}
+            onChange={(e) => setTeamSlug(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="예: raven-fc"
+          />
+        </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">아이디</label>
           <input
@@ -59,7 +80,7 @@ export default function LoginPage() {
         {error && <p className="text-sm text-red-500">{error}</p>}
         <button
           onClick={submit}
-          disabled={loading || !username.trim() || !password}
+          disabled={loading || !teamSlug.trim() || !username.trim() || !password}
           className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
         >
           {loading ? "로그인 중…" : "로그인"}
@@ -78,6 +99,12 @@ export default function LoginPage() {
         계정이 없나요?{" "}
         <Link href="/signup" className="font-semibold text-blue-700">
           가입하기
+        </Link>
+      </p>
+      <p className="text-center text-sm text-zinc-500">
+        우리 팀이 아직 없나요?{" "}
+        <Link href="/teams/new" className="font-semibold text-blue-700">
+          새 팀 만들기
         </Link>
       </p>
     </div>

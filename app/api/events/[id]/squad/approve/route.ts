@@ -26,7 +26,7 @@ export async function POST(
   const field = team === "B" ? "scrimmageSquad" : "squad";
 
   const { id } = await params;
-  const event = await getEvent(Number(id));
+  const event = await getEvent(session.teamId, Number(id));
   const target = event?.[field];
   if (!target) {
     return Response.json({ error: "스쿼드가 없어요." }, { status: 404 });
@@ -38,6 +38,6 @@ export async function POST(
     : [...approvedBy, session.memberId];
 
   const squad = { ...target, approvedBy: nextApprovedBy };
-  await updateEvent(event!.id, { [field]: squad });
+  await updateEvent(session.teamId, event!.id, { [field]: squad });
   return Response.json(squad);
 }

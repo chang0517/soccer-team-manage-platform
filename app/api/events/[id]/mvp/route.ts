@@ -1,17 +1,22 @@
+import { getSessionUser } from "@/lib/auth";
 import { getMvpVotes, getVotes, setMvpVote } from "@/lib/db";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const { id } = await params;
-  return Response.json(await getMvpVotes(Number(id)));
+  return Response.json(await getMvpVotes(session.teamId, Number(id)));
 }
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const { id } = await params;
   const body = await request.json();
   if (!body.voterId || !body.voteeId) {
@@ -23,7 +28,7 @@ export async function POST(
       { status: 400 }
     );
   }
-  const votes = await getVotes(Number(id));
+  const votes = await getVotes(session.teamId, Number(id));
   const attendIds = new Set(
     votes.filter((v) => v.status === "attend").map((v) => v.memberId)
   );
@@ -33,6 +38,6 @@ export async function POST(
       { status: 403 }
     );
   }
-  await setMvpVote(Number(id), Number(body.voterId), Number(body.voteeId));
+  await setMvpVote(session.teamId, Number(id), Number(body.voterId), Number(body.voteeId));
   return Response.json({ ok: true });
 }

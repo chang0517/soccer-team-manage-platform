@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<"username" | "code" | "result">("username");
+  const [teamSlug, setTeamSlug] = useState("");
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
   const [phoneHint, setPhoneHint] = useState("");
@@ -12,17 +14,21 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [tempPassword, setTempPassword] = useState("");
 
+  useEffect(() => {
+    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
+  }, []);
+
   const input =
     "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
 
   const requestCode = async () => {
-    if (!username.trim()) return;
+    if (!teamSlug.trim() || !username.trim()) return;
     setLoading(true);
     setError("");
     const res = await fetch("/api/auth/reset-password/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username.trim() }),
+      body: JSON.stringify({ teamSlug: teamSlug.trim(), username: username.trim() }),
     });
     const data = await res.json();
     setLoading(false);
@@ -41,7 +47,11 @@ export default function ResetPasswordPage() {
     const res = await fetch("/api/auth/reset-password/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username.trim(), code: code.trim() }),
+      body: JSON.stringify({
+        teamSlug: teamSlug.trim(),
+        username: username.trim(),
+        code: code.trim(),
+      }),
     });
     const data = await res.json();
     setLoading(false);
@@ -77,6 +87,15 @@ export default function ResetPasswordPage() {
       <h1 className="text-center text-lg font-bold">비밀번호 찾기</h1>
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
         <div>
+          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
+          <input
+            className={input}
+            value={teamSlug}
+            onChange={(e) => setTeamSlug(e.target.value)}
+            disabled={step === "code"}
+          />
+        </div>
+        <div>
           <label className="text-xs font-semibold text-zinc-500">아이디</label>
           <input
             className={input}
@@ -89,7 +108,7 @@ export default function ResetPasswordPage() {
         {step === "username" && (
           <button
             onClick={requestCode}
-            disabled={loading || !username.trim()}
+            disabled={loading || !teamSlug.trim() || !username.trim()}
             className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
           >
             {loading ? "발송 중…" : "인증번호 받기"}

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
   const trimmed = description.trim();
 
-  const job = await createTacticsJob(session.id, trimmed, getConfiguredModel());
+  const job = await createTacticsJob(session.teamId, session.id, trimmed, getConfiguredModel());
 
   after(async () => {
     try {

@@ -6,7 +6,8 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json(
       { error: "운영진만 스쿼드를 만들 수 있어요." },
       { status: 403 }
@@ -15,16 +16,16 @@ export async function POST(
 
   const { id } = await params;
   const eventId = Number(id);
-  const event = await getEvent(eventId);
+  const event = await getEvent(admin.teamId, eventId);
   if (!event) return Response.json({ error: "not found" }, { status: 404 });
 
   const attendIds = new Set(
-    (await getVotes(eventId))
+    (await getVotes(admin.teamId, eventId))
       .filter((v) => v.status === "attend")
       .map((v) => v.memberId)
   );
-  const attendees = (await listMembers()).filter((m) => attendIds.has(m.id));
+  const attendees = (await listMembers(admin.teamId)).filter((m) => attendIds.has(m.id));
   const squad = generateSquad(attendees);
-  await updateEvent(eventId, { squad });
+  await updateEvent(admin.teamId, eventId, { squad });
   return Response.json(squad);
 }

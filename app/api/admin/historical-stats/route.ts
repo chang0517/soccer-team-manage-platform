@@ -19,14 +19,16 @@ interface ImportEntry {
 const CLEAN_POINT_PER_UNIT = 1.25;
 
 export async function GET() {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 가능해요." }, { status: 403 });
   }
-  return Response.json(await getAllHistoricalStats());
+  return Response.json(await getAllHistoricalStats(admin.teamId));
 }
 
 export async function PUT(request: Request) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 가능해요." }, { status: 403 });
   }
   const body = await request.json();
@@ -34,7 +36,7 @@ export async function PUT(request: Request) {
   if (!memberId) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
-  await upsertHistoricalStats({
+  await upsertHistoricalStats(admin.teamId, {
     memberId,
     games: Number(body.games) || 0,
     goals: Number(body.goals) || 0,
@@ -46,7 +48,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 가능해요." }, { status: 403 });
   }
   const body = await request.json();
@@ -54,17 +57,18 @@ export async function DELETE(request: Request) {
   if (!memberId) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
-  await deleteHistoricalStats(memberId);
+  await deleteHistoricalStats(admin.teamId, memberId);
   return Response.json({ ok: true });
 }
 
 export async function POST(request: Request) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 가능해요." }, { status: 403 });
   }
   const body = await request.json();
   const entries: ImportEntry[] = body?.entries ?? [];
-  const members = await listMembers();
+  const members = await listMembers(admin.teamId);
   const byName = new Map(members.map((m) => [m.name, m]));
 
   const updated: string[] = [];
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
       notFound.push(e.name);
       continue;
     }
-    await upsertHistoricalStats({
+    await upsertHistoricalStats(admin.teamId, {
       memberId: member.id,
       games: e.games,
       goals: e.goals,

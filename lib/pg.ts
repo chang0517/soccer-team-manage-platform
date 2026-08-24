@@ -1,5 +1,4 @@
 import { Pool } from "pg";
-import { ROSTER } from "./roster";
 import type {
   AnnouncementCategory,
   AnnouncementRow,
@@ -20,6 +19,7 @@ import type {
   TacticsJobRow,
   TacticsJobStatus,
   TacticsScene,
+  TeamRow,
   UserRole,
   UserStatus,
   VerificationPurpose,
@@ -28,14 +28,14 @@ import type {
 } from "./types";
 
 const globalForPg = globalThis as unknown as {
-  ravenPool?: Pool;
-  ravenPgReady?: Promise<void>;
+  platformPool?: Pool;
+  platformPgReady?: Promise<void>;
 };
 
 function getPool(): Pool {
-  if (!globalForPg.ravenPool) {
+  if (!globalForPg.platformPool) {
     const connectionString = process.env.DATABASE_URL!;
-    globalForPg.ravenPool = new Pool({
+    globalForPg.platformPool = new Pool({
       connectionString,
       // 서버리스는 함수 인스턴스마다 별도 풀을 만들기 때문에 인스턴스당
       // 커넥션 수를 작게 유지해야 Supabase 풀러의 동시 접속 한도를 넘지 않는다.
@@ -47,14 +47,23 @@ function getPool(): Pool {
         : undefined,
     });
   }
-  return globalForPg.ravenPool;
+  return globalForPg.platformPool;
 }
 
 async function init() {
   const pool = getPool();
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id SERIAL PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      fine_account TEXT NOT NULL DEFAULT '',
+      fine_amount TEXT NOT NULL DEFAULT '20,000원',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS members (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       back_no INTEGER,
       pos1 TEXT NOT NULL DEFAULT 'CB',
@@ -64,6 +73,7 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS events (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'match',
       date TEXT NOT NULL,
@@ -83,12 +93,14 @@ async function init() {
       equipment_reminder_sent BOOLEAN NOT NULL DEFAULT false
     );
     CREATE TABLE IF NOT EXISTS votes (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       status TEXT NOT NULL,
       PRIMARY KEY (event_id, member_id)
     );
     CREATE TABLE IF NOT EXISTS records (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       played INTEGER NOT NULL DEFAULT 0,
@@ -98,6 +110,7 @@ async function init() {
       PRIMARY KEY (event_id, member_id)
     );
     CREATE TABLE IF NOT EXISTS mvp_votes (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       voter_id INTEGER NOT NULL,
       votee_id INTEGER NOT NULL,
@@ -105,7 +118,8 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
+      team_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       display_name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'player',
@@ -115,16 +129,19 @@ async function init() {
       draft_pos1 TEXT,
       draft_pos2 TEXT,
       draft_back_no INTEGER,
-      draft_phone TEXT
+      draft_phone TEXT,
+      UNIQUE (team_id, username)
     );
     CREATE TABLE IF NOT EXISTS comments (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       body TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS historical_stats (
+      team_id INTEGER NOT NULL,
       member_id INTEGER PRIMARY KEY,
       games INTEGER NOT NULL DEFAULT 0,
       goals INTEGER NOT NULL DEFAULT 0,
@@ -134,6 +151,7 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS announcements (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       author_name TEXT NOT NULL,
@@ -144,17 +162,20 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS hall_of_fame (
       id SERIAL PRIMARY KEY,
-      year INTEGER NOT NULL UNIQUE,
+      team_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
       captain_id INTEGER,
       vice_captain_id INTEGER,
       manager_id INTEGER,
       top_scorer_id INTEGER,
       top_assist_id INTEGER,
       clean_sheet_first_id INTEGER,
-      overall_first_id INTEGER
+      overall_first_id INTEGER,
+      UNIQUE (team_id, year)
     );
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       endpoint TEXT NOT NULL UNIQUE,
       p256dh TEXT NOT NULL,
       auth TEXT NOT NULL,
@@ -163,6 +184,7 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS polls (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       created_by INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -171,11 +193,13 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS poll_options (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       poll_id INTEGER NOT NULL,
       label TEXT NOT NULL,
       order_idx INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS poll_votes (
+      team_id INTEGER NOT NULL,
       poll_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       option_id INTEGER NOT NULL,
@@ -183,6 +207,7 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS phone_verifications (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       phone TEXT NOT NULL,
       purpose TEXT NOT NULL,
       code TEXT NOT NULL,
@@ -193,6 +218,7 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS tactics_jobs (
       id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -203,58 +229,77 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
-  await pool.query(
-    "ALTER TABLE historical_stats ADD COLUMN IF NOT EXISTS bonus_pts DOUBLE PRECISION NOT NULL DEFAULT 0"
-  );
-  await pool.query(
-    "ALTER TABLE members ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT false"
-  );
-  await pool.query("ALTER TABLE members ADD COLUMN IF NOT EXISTS phone TEXT");
-  for (const col of ["duty_offense", "duty_defense", "water_duty", "icebox_duty"]) {
-    await pool.query(
-      `ALTER TABLE events ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`
-    );
-  }
-  await pool.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS record_log JSONB");
-  await pool.query(
-    "ALTER TABLE events ADD COLUMN IF NOT EXISTS equipment_reminder_sent BOOLEAN NOT NULL DEFAULT false"
-  );
-  await pool.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS scrimmage_squad JSONB");
-  await pool.query(
-    "ALTER TABLE hall_of_fame ADD COLUMN IF NOT EXISTS clean_sheet_first_id INTEGER"
-  );
-  await pool.query(
-    "ALTER TABLE polls ADD COLUMN IF NOT EXISTS multi_select BOOLEAN NOT NULL DEFAULT true"
-  );
-  await pool.query("ALTER TABLE tactics_jobs ADD COLUMN IF NOT EXISTS raw_response TEXT");
-  await pool.query(
-    "ALTER TABLE tactics_jobs ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT ''"
-  );
-  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS draft_pos1 TEXT");
-  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS draft_pos2 TEXT");
-  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS draft_back_no INTEGER");
-  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS draft_phone TEXT");
-  await pool.query(
-    "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'notice'"
-  );
-  await pool.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS feedback_date TEXT");
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS c FROM members");
-  if (rows[0].c === 0) {
-    for (const [name, p1, p2] of ROSTER) {
-      await pool.query(
-        "INSERT INTO members (name, back_no, pos1, pos2, is_guest) VALUES ($1, NULL, $2, $3, false)",
-        [name, p1, p2]
-      );
-    }
-  }
 }
 
 async function ready(): Promise<Pool> {
-  if (!globalForPg.ravenPgReady) globalForPg.ravenPgReady = init();
-  await globalForPg.ravenPgReady;
+  if (!globalForPg.platformPgReady) globalForPg.platformPgReady = init();
+  await globalForPg.platformPgReady;
   return getPool();
 }
 
+// ---------- teams ----------
+type TeamDbRow = {
+  id: number;
+  slug: string;
+  name: string;
+  fine_account: string;
+  fine_amount: string;
+  created_at: string;
+};
+
+function toTeam(r: TeamDbRow): TeamRow {
+  return {
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    fineAccount: r.fine_account,
+    fineAmount: r.fine_amount,
+    createdAt: r.created_at,
+  };
+}
+
+export async function getTeamBySlug(slug: string): Promise<TeamRow | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT * FROM teams WHERE slug=$1", [slug]);
+  return rows[0] ? toTeam(rows[0]) : null;
+}
+
+export async function getTeamById(id: number): Promise<TeamRow | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT * FROM teams WHERE id=$1", [id]);
+  return rows[0] ? toTeam(rows[0]) : null;
+}
+
+export async function createTeam(t: { slug: string; name: string }): Promise<TeamRow> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "INSERT INTO teams (slug, name) VALUES ($1, $2) RETURNING id",
+    [t.slug, t.name]
+  );
+  return (await getTeamById(rows[0].id))!;
+}
+
+export async function listTeams(): Promise<TeamRow[]> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT * FROM teams ORDER BY id");
+  return rows.map(toTeam);
+}
+
+export async function updateTeamFineSettings(
+  teamId: number,
+  patch: { fineAccount?: string; fineAmount?: string }
+) {
+  const pool = await ready();
+  const cur = await getTeamById(teamId);
+  if (!cur) return;
+  await pool.query("UPDATE teams SET fine_account=$1, fine_amount=$2 WHERE id=$3", [
+    patch.fineAccount ?? cur.fineAccount,
+    patch.fineAmount ?? cur.fineAmount,
+    teamId,
+  ]);
+}
+
+// ---------- members ----------
 type MemberDbRow = {
   id: number;
   name: string;
@@ -277,37 +322,49 @@ function toMember(r: MemberDbRow): Member {
   };
 }
 
-export async function listMembers(): Promise<Member[]> {
+export async function listMembers(teamId: number): Promise<Member[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM members ORDER BY name");
+  const { rows } = await pool.query(
+    "SELECT * FROM members WHERE team_id=$1 ORDER BY name",
+    [teamId]
+  );
   return (rows as MemberDbRow[]).map(toMember);
 }
 
-export async function createMember(m: Omit<Member, "id">): Promise<Member> {
+export async function getMember(teamId: number, id: number): Promise<Member | null> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO members (name, back_no, pos1, pos2, is_guest, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-    [m.name, m.backNo, m.pos1, m.pos2, !!m.isGuest, m.phone ?? null]
+    "SELECT * FROM members WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
+  return rows[0] ? toMember(rows[0] as MemberDbRow) : null;
+}
+
+export async function createMember(teamId: number, m: Omit<Member, "id">): Promise<Member> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "INSERT INTO members (team_id, name, back_no, pos1, pos2, is_guest, phone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    [teamId, m.name, m.backNo, m.pos1, m.pos2, !!m.isGuest, m.phone ?? null]
   );
   return { id: rows[0].id, ...m };
 }
 
-export async function updateMember(id: number, m: Omit<Member, "id">) {
+export async function updateMember(teamId: number, id: number, m: Omit<Member, "id">) {
   const pool = await ready();
   await pool.query(
-    "UPDATE members SET name=$1, back_no=$2, pos1=$3, pos2=$4, is_guest=$5, phone=$6 WHERE id=$7",
-    [m.name, m.backNo, m.pos1, m.pos2, !!m.isGuest, m.phone ?? null, id]
+    "UPDATE members SET name=$1, back_no=$2, pos1=$3, pos2=$4, is_guest=$5, phone=$6 WHERE id=$7 AND team_id=$8",
+    [m.name, m.backNo, m.pos1, m.pos2, !!m.isGuest, m.phone ?? null, id, teamId]
   );
 }
 
-export async function deleteMember(id: number) {
+export async function deleteMember(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM members WHERE id=$1", [id]);
-  await pool.query("DELETE FROM votes WHERE member_id=$1", [id]);
-  await pool.query("DELETE FROM records WHERE member_id=$1", [id]);
+  await pool.query("DELETE FROM members WHERE id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM votes WHERE member_id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM records WHERE member_id=$1 AND team_id=$2", [id, teamId]);
   await pool.query(
-    "DELETE FROM mvp_votes WHERE voter_id=$1 OR votee_id=$1",
-    [id]
+    "DELETE FROM mvp_votes WHERE (voter_id=$1 OR votee_id=$1) AND team_id=$2",
+    [id, teamId]
   );
 }
 
@@ -355,21 +412,26 @@ function toEvent(r: EventDbRow): EventItem {
   };
 }
 
-export async function listEvents(): Promise<EventItem[]> {
+export async function listEvents(teamId: number): Promise<EventItem[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM events ORDER BY date DESC, time DESC"
+    "SELECT * FROM events WHERE team_id=$1 ORDER BY date DESC, time DESC",
+    [teamId]
   );
   return (rows as EventDbRow[]).map(toEvent);
 }
 
-export async function getEvent(id: number): Promise<EventItem | null> {
+export async function getEvent(teamId: number, id: number): Promise<EventItem | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM events WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM events WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toEvent(rows[0] as EventDbRow) : null;
 }
 
 export async function createEvent(
+  teamId: number,
   e: Omit<
     EventItem,
     "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
@@ -377,8 +439,9 @@ export async function createEvent(
 ): Promise<EventItem> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO events (title, type, date, time, location, opponent, notes, duty_offense, duty_defense, water_duty, icebox_duty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+    "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, water_duty, icebox_duty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
     [
+      teamId,
       e.title,
       e.type,
       e.date,
@@ -392,16 +455,16 @@ export async function createEvent(
       e.iceboxDuty ?? "",
     ]
   );
-  return (await getEvent(rows[0].id))!;
+  return (await getEvent(teamId, rows[0].id))!;
 }
 
-export async function updateEvent(id: number, patch: Partial<EventItem>) {
-  const cur = await getEvent(id);
+export async function updateEvent(teamId: number, id: number, patch: Partial<EventItem>) {
+  const cur = await getEvent(teamId, id);
   if (!cur) return;
   const next = { ...cur, ...patch };
   const pool = await ready();
   await pool.query(
-    "UPDATE events SET title=$1, type=$2, date=$3, time=$4, location=$5, opponent=$6, scored=$7, conceded=$8, squad=$9, scrimmage_squad=$10, notes=$11, duty_offense=$12, duty_defense=$13, water_duty=$14, icebox_duty=$15, record_log=$16, equipment_reminder_sent=$17 WHERE id=$18",
+    "UPDATE events SET title=$1, type=$2, date=$3, time=$4, location=$5, opponent=$6, scored=$7, conceded=$8, squad=$9, scrimmage_squad=$10, notes=$11, duty_offense=$12, duty_defense=$13, water_duty=$14, icebox_duty=$15, record_log=$16, equipment_reminder_sent=$17 WHERE id=$18 AND team_id=$19",
     [
       next.title,
       next.type,
@@ -421,23 +484,25 @@ export async function updateEvent(id: number, patch: Partial<EventItem>) {
       next.recordLog ? JSON.stringify(next.recordLog) : null,
       next.equipmentReminderSent ?? false,
       id,
+      teamId,
     ]
   );
 }
 
-export async function deleteEvent(id: number) {
+export async function deleteEvent(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM events WHERE id=$1", [id]);
-  await pool.query("DELETE FROM votes WHERE event_id=$1", [id]);
-  await pool.query("DELETE FROM records WHERE event_id=$1", [id]);
-  await pool.query("DELETE FROM mvp_votes WHERE event_id=$1", [id]);
+  await pool.query("DELETE FROM events WHERE id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM votes WHERE event_id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM records WHERE event_id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM mvp_votes WHERE event_id=$1 AND team_id=$2", [id, teamId]);
 }
 
-export async function getVotes(eventId: number): Promise<VoteRow[]> {
+export async function getVotes(teamId: number, eventId: number): Promise<VoteRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM votes WHERE event_id=$1", [
-    eventId,
-  ]);
+  const { rows } = await pool.query(
+    "SELECT * FROM votes WHERE event_id=$1 AND team_id=$2",
+    [eventId, teamId]
+  );
   return rows.map((r) => ({
     eventId: r.event_id,
     memberId: r.member_id,
@@ -445,12 +510,12 @@ export async function getVotes(eventId: number): Promise<VoteRow[]> {
   }));
 }
 
-export async function getVotesForEvents(eventIds: number[]): Promise<VoteRow[]> {
+export async function getVotesForEvents(teamId: number, eventIds: number[]): Promise<VoteRow[]> {
   if (eventIds.length === 0) return [];
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM votes WHERE event_id = ANY($1::int[])",
-    [eventIds]
+    "SELECT * FROM votes WHERE team_id=$1 AND event_id = ANY($2::int[])",
+    [teamId, eventIds]
   );
   return rows.map((r) => ({
     eventId: r.event_id,
@@ -460,14 +525,15 @@ export async function getVotesForEvents(eventIds: number[]): Promise<VoteRow[]> 
 }
 
 export async function setVote(
+  teamId: number,
   eventId: number,
   memberId: number,
   status: VoteStatus
 ) {
   const pool = await ready();
   await pool.query(
-    "INSERT INTO votes (event_id, member_id, status) VALUES ($1, $2, $3) ON CONFLICT (event_id, member_id) DO UPDATE SET status=EXCLUDED.status",
-    [eventId, memberId, status]
+    "INSERT INTO votes (team_id, event_id, member_id, status) VALUES ($1, $2, $3, $4) ON CONFLICT (event_id, member_id) DO UPDATE SET status=EXCLUDED.status",
+    [teamId, eventId, memberId, status]
   );
 }
 
@@ -489,25 +555,29 @@ function toRecord(r: {
   };
 }
 
-export async function getRecords(eventId: number): Promise<RecordRow[]> {
+export async function getRecords(teamId: number, eventId: number): Promise<RecordRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM records WHERE event_id=$1", [
-    eventId,
-  ]);
+  const { rows } = await pool.query(
+    "SELECT * FROM records WHERE event_id=$1 AND team_id=$2",
+    [eventId, teamId]
+  );
   return rows.map(toRecord);
 }
 
-export async function saveRecords(eventId: number, records: RecordRow[]) {
+export async function saveRecords(teamId: number, eventId: number, records: RecordRow[]) {
   const pool = await ready();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM records WHERE event_id=$1", [eventId]);
+    await client.query("DELETE FROM records WHERE event_id=$1 AND team_id=$2", [
+      eventId,
+      teamId,
+    ]);
     for (const r of records) {
       if (!r.played && r.goals === 0 && r.assists === 0) continue;
       await client.query(
-        "INSERT INTO records (event_id, member_id, played, goals, assists, position) VALUES ($1, $2, $3, $4, $5, $6)",
-        [eventId, r.memberId, r.played ? 1 : 0, r.goals, r.assists, r.position]
+        "INSERT INTO records (team_id, event_id, member_id, played, goals, assists, position) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [teamId, eventId, r.memberId, r.played ? 1 : 0, r.goals, r.assists, r.position]
       );
     }
     await client.query("COMMIT");
@@ -519,9 +589,9 @@ export async function saveRecords(eventId: number, records: RecordRow[]) {
   }
 }
 
-export async function getAllRecords(): Promise<RecordRow[]> {
+export async function getAllRecords(teamId: number): Promise<RecordRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM records");
+  const { rows } = await pool.query("SELECT * FROM records WHERE team_id=$1", [teamId]);
   return rows.map(toRecord);
 }
 
@@ -533,36 +603,38 @@ function toMvpVote(r: {
   return { eventId: r.event_id, voterId: r.voter_id, voteeId: r.votee_id };
 }
 
-export async function getMvpVotes(eventId: number): Promise<MvpVoteRow[]> {
+export async function getMvpVotes(teamId: number, eventId: number): Promise<MvpVoteRow[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM mvp_votes WHERE event_id=$1",
-    [eventId]
+    "SELECT * FROM mvp_votes WHERE event_id=$1 AND team_id=$2",
+    [eventId, teamId]
   );
   return rows.map(toMvpVote);
 }
 
 export async function setMvpVote(
+  teamId: number,
   eventId: number,
   voterId: number,
   voteeId: number
 ) {
   const pool = await ready();
   await pool.query(
-    "INSERT INTO mvp_votes (event_id, voter_id, votee_id) VALUES ($1, $2, $3) ON CONFLICT (event_id, voter_id) DO UPDATE SET votee_id=EXCLUDED.votee_id",
-    [eventId, voterId, voteeId]
+    "INSERT INTO mvp_votes (team_id, event_id, voter_id, votee_id) VALUES ($1, $2, $3, $4) ON CONFLICT (event_id, voter_id) DO UPDATE SET votee_id=EXCLUDED.votee_id",
+    [teamId, eventId, voterId, voteeId]
   );
 }
 
-export async function getAllMvpVotes(): Promise<MvpVoteRow[]> {
+export async function getAllMvpVotes(teamId: number): Promise<MvpVoteRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM mvp_votes");
+  const { rows } = await pool.query("SELECT * FROM mvp_votes WHERE team_id=$1", [teamId]);
   return rows.map(toMvpVote);
 }
 
 // ---------- users ----------
 type UserDbRow = {
   id: number;
+  team_id: number;
   username: string;
   password_hash: string;
   display_name: string;
@@ -579,6 +651,7 @@ type UserDbRow = {
 function toUser(r: UserDbRow): AppUser {
   return {
     id: r.id,
+    teamId: r.team_id,
     username: r.username,
     displayName: r.display_name,
     role: r.role,
@@ -592,72 +665,80 @@ function toUser(r: UserDbRow): AppUser {
   };
 }
 
-export async function countUsers(): Promise<number> {
-  const pool = await ready();
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS c FROM users");
-  return rows[0].c;
-}
-
-export async function countUsersByDisplayName(displayName: string): Promise<number> {
+export async function countUsers(teamId: number): Promise<number> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT COUNT(*)::int AS c FROM users WHERE display_name=$1",
-    [displayName]
+    "SELECT COUNT(*)::int AS c FROM users WHERE team_id=$1",
+    [teamId]
   );
   return rows[0].c;
 }
 
 export async function getUserByUsername(
+  teamId: number,
   username: string
 ): Promise<(AppUser & { passwordHash: string }) | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM users WHERE username=$1", [
-    username,
-  ]);
+  const { rows } = await pool.query(
+    "SELECT * FROM users WHERE team_id=$1 AND username=$2",
+    [teamId, username]
+  );
   const r = rows[0] as UserDbRow | undefined;
   return r ? { ...toUser(r), passwordHash: r.password_hash } : null;
 }
 
-export async function getUserById(id: number): Promise<AppUser | null> {
+// id는 users.id(전역 유일 PK)라 teamId 없이도 행이 특정되지만, 세션 위조로
+// 다른 팀 사용자 id를 들이미는 걸 막기 위해 teamId도 함께 검증한다.
+export async function getUserById(teamId: number, id: number): Promise<AppUser | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM users WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM users WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toUser(rows[0] as UserDbRow) : null;
 }
 
-export async function listUsersByStatus(status: UserStatus): Promise<AppUser[]> {
+export async function listUsersByStatus(
+  teamId: number,
+  status: UserStatus
+): Promise<AppUser[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM users WHERE status=$1 ORDER BY created_at",
-    [status]
+    "SELECT * FROM users WHERE team_id=$1 AND status=$2 ORDER BY created_at",
+    [teamId, status]
   );
   return (rows as UserDbRow[]).map(toUser);
 }
 
-export async function getUsersByMemberId(memberId: number): Promise<AppUser[]> {
+export async function getUsersByMemberId(teamId: number, memberId: number): Promise<AppUser[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM users WHERE member_id=$1 ORDER BY created_at",
-    [memberId]
+    "SELECT * FROM users WHERE team_id=$1 AND member_id=$2 ORDER BY created_at",
+    [teamId, memberId]
   );
   return (rows as UserDbRow[]).map(toUser);
 }
 
-export async function createUser(u: {
-  username: string;
-  passwordHash: string;
-  displayName: string;
-  role: UserRole;
-  status: UserStatus;
-  memberId: number | null;
-  draftPos1?: PosGroup | null;
-  draftPos2?: PosGroup | null;
-  draftBackNo?: number | null;
-  draftPhone?: string | null;
-}): Promise<AppUser> {
+export async function createUser(
+  teamId: number,
+  u: {
+    username: string;
+    passwordHash: string;
+    displayName: string;
+    role: UserRole;
+    status: UserStatus;
+    memberId: number | null;
+    draftPos1?: PosGroup | null;
+    draftPos2?: PosGroup | null;
+    draftBackNo?: number | null;
+    draftPhone?: string | null;
+  }
+): Promise<AppUser> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO users (username, password_hash, display_name, role, status, member_id, draft_pos1, draft_pos2, draft_back_no, draft_phone) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+    "INSERT INTO users (team_id, username, password_hash, display_name, role, status, member_id, draft_pos1, draft_pos2, draft_back_no, draft_phone) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
     [
+      teamId,
       u.username,
       u.passwordHash,
       u.displayName,
@@ -670,10 +751,11 @@ export async function createUser(u: {
       u.draftPhone ?? null,
     ]
   );
-  return (await getUserById(rows[0].id))!;
+  return (await getUserById(teamId, rows[0].id))!;
 }
 
 export async function updateUserStatus(
+  teamId: number,
   id: number,
   status: UserStatus,
   memberId: number | null,
@@ -682,21 +764,24 @@ export async function updateUserStatus(
   const pool = await ready();
   if (role) {
     await pool.query(
-      "UPDATE users SET status=$1, member_id=$2, role=$3 WHERE id=$4",
-      [status, memberId, role, id]
+      "UPDATE users SET status=$1, member_id=$2, role=$3 WHERE id=$4 AND team_id=$5",
+      [status, memberId, role, id, teamId]
     );
   } else {
-    await pool.query("UPDATE users SET status=$1, member_id=$2 WHERE id=$3", [
-      status,
-      memberId,
-      id,
-    ]);
+    await pool.query(
+      "UPDATE users SET status=$1, member_id=$2 WHERE id=$3 AND team_id=$4",
+      [status, memberId, id, teamId]
+    );
   }
 }
 
-export async function updateUserPassword(id: number, passwordHash: string) {
+export async function updateUserPassword(teamId: number, id: number, passwordHash: string) {
   const pool = await ready();
-  await pool.query("UPDATE users SET password_hash=$1 WHERE id=$2", [passwordHash, id]);
+  await pool.query("UPDATE users SET password_hash=$1 WHERE id=$2 AND team_id=$3", [
+    passwordHash,
+    id,
+    teamId,
+  ]);
 }
 
 // ---------- phone verification (아이디/비밀번호 찾기 SMS 인증) ----------
@@ -722,28 +807,27 @@ function toPhoneVerification(r: {
   };
 }
 
-export async function createPhoneVerification(v: {
-  phone: string;
-  purpose: VerificationPurpose;
-  code: string;
-  expiresAt: string;
-}): Promise<PhoneVerificationRow> {
+export async function createPhoneVerification(
+  teamId: number,
+  v: { phone: string; purpose: VerificationPurpose; code: string; expiresAt: string }
+): Promise<PhoneVerificationRow> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO phone_verifications (phone, purpose, code, expires_at) VALUES ($1, $2, $3, $4) RETURNING *",
-    [v.phone, v.purpose, v.code, v.expiresAt]
+    "INSERT INTO phone_verifications (team_id, phone, purpose, code, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    [teamId, v.phone, v.purpose, v.code, v.expiresAt]
   );
   return toPhoneVerification(rows[0]);
 }
 
 export async function getLatestPhoneVerification(
+  teamId: number,
   phone: string,
   purpose: VerificationPurpose
 ): Promise<PhoneVerificationRow | null> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM phone_verifications WHERE phone=$1 AND purpose=$2 ORDER BY id DESC LIMIT 1",
-    [phone, purpose]
+    "SELECT * FROM phone_verifications WHERE team_id=$1 AND phone=$2 AND purpose=$3 ORDER BY id DESC LIMIT 1",
+    [teamId, phone, purpose]
   );
   return rows[0] ? toPhoneVerification(rows[0]) : null;
 }
@@ -786,7 +870,17 @@ function toTacticsJob(r: {
   };
 }
 
+export async function listTacticsJobs(teamId: number): Promise<TacticsJobRow[]> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "SELECT * FROM tactics_jobs WHERE team_id=$1 ORDER BY created_at DESC",
+    [teamId]
+  );
+  return rows.map(toTacticsJob);
+}
+
 export async function createTacticsJob(
+  teamId: number,
   userId: number,
   description: string,
   model: string
@@ -795,15 +889,18 @@ export async function createTacticsJob(
   // 오래된 작업이 계속 쌓이지 않게, 새 작업을 만들 때마다 하루 지난 것들을 지운다.
   await pool.query("DELETE FROM tactics_jobs WHERE created_at < now() - interval '1 day'");
   const { rows } = await pool.query(
-    "INSERT INTO tactics_jobs (user_id, description, status, model) VALUES ($1, $2, 'pending', $3) RETURNING *",
-    [userId, description, model]
+    "INSERT INTO tactics_jobs (team_id, user_id, description, status, model) VALUES ($1, $2, $3, 'pending', $4) RETURNING *",
+    [teamId, userId, description, model]
   );
   return toTacticsJob(rows[0]);
 }
 
-export async function getTacticsJob(id: number): Promise<TacticsJobRow | null> {
+export async function getTacticsJob(teamId: number, id: number): Promise<TacticsJobRow | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM tactics_jobs WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM tactics_jobs WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toTacticsJob(rows[0]) : null;
 }
 
@@ -837,6 +934,11 @@ export async function cancelTacticsJob(id: number) {
   );
 }
 
+export async function deleteTacticsJob(teamId: number, id: number) {
+  const pool = await ready();
+  await pool.query("DELETE FROM tactics_jobs WHERE id=$1 AND team_id=$2", [id, teamId]);
+}
+
 // ---------- comments ----------
 function toComment(r: {
   id: number;
@@ -854,37 +956,41 @@ function toComment(r: {
   };
 }
 
-export async function getComments(eventId: number): Promise<CommentRow[]> {
+export async function getComments(teamId: number, eventId: number): Promise<CommentRow[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM comments WHERE event_id=$1 ORDER BY created_at",
-    [eventId]
+    "SELECT * FROM comments WHERE event_id=$1 AND team_id=$2 ORDER BY created_at",
+    [eventId, teamId]
   );
   return rows.map(toComment);
 }
 
 export async function addComment(
+  teamId: number,
   eventId: number,
   memberId: number,
   body: string
 ): Promise<CommentRow> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO comments (event_id, member_id, body) VALUES ($1, $2, $3) RETURNING *",
-    [eventId, memberId, body]
+    "INSERT INTO comments (team_id, event_id, member_id, body) VALUES ($1, $2, $3, $4) RETURNING *",
+    [teamId, eventId, memberId, body]
   );
   return toComment(rows[0]);
 }
 
-export async function getComment(id: number): Promise<CommentRow | null> {
+export async function getComment(teamId: number, id: number): Promise<CommentRow | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM comments WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM comments WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toComment(rows[0]) : null;
 }
 
-export async function deleteComment(id: number) {
+export async function deleteComment(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM comments WHERE id=$1", [id]);
+  await pool.query("DELETE FROM comments WHERE id=$1 AND team_id=$2", [id, teamId]);
 }
 
 function toHistorical(r: {
@@ -905,22 +1011,26 @@ function toHistorical(r: {
   };
 }
 
-export async function getAllHistoricalStats(): Promise<HistoricalStats[]> {
+export async function getAllHistoricalStats(teamId: number): Promise<HistoricalStats[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM historical_stats");
+  const { rows } = await pool.query(
+    "SELECT * FROM historical_stats WHERE team_id=$1",
+    [teamId]
+  );
   return rows.map(toHistorical);
 }
 
-export async function upsertHistoricalStats(stats: HistoricalStats) {
+export async function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
   const pool = await ready();
   await pool.query(
-    `INSERT INTO historical_stats (member_id, games, goals, assists, clean_pts, bonus_pts)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO historical_stats (team_id, member_id, games, goals, assists, clean_pts, bonus_pts)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (member_id) DO UPDATE SET
        games=EXCLUDED.games, goals=EXCLUDED.goals,
        assists=EXCLUDED.assists, clean_pts=EXCLUDED.clean_pts,
        bonus_pts=EXCLUDED.bonus_pts`,
     [
+      teamId,
       stats.memberId,
       stats.games,
       stats.goals,
@@ -931,9 +1041,12 @@ export async function upsertHistoricalStats(stats: HistoricalStats) {
   );
 }
 
-export async function deleteHistoricalStats(memberId: number) {
+export async function deleteHistoricalStats(teamId: number, memberId: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM historical_stats WHERE member_id=$1", [memberId]);
+  await pool.query("DELETE FROM historical_stats WHERE member_id=$1 AND team_id=$2", [
+    memberId,
+    teamId,
+  ]);
 }
 
 function toAnnouncement(r: {
@@ -958,52 +1071,61 @@ function toAnnouncement(r: {
   };
 }
 
-export async function listAnnouncements(): Promise<AnnouncementRow[]> {
+export async function listAnnouncements(teamId: number): Promise<AnnouncementRow[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM announcements ORDER BY created_at DESC"
+    "SELECT * FROM announcements WHERE team_id=$1 ORDER BY created_at DESC",
+    [teamId]
   );
   return rows.map(toAnnouncement);
 }
 
-export async function getAnnouncement(id: number): Promise<AnnouncementRow | null> {
+export async function getAnnouncement(
+  teamId: number,
+  id: number
+): Promise<AnnouncementRow | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM announcements WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM announcements WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toAnnouncement(rows[0]) : null;
 }
 
 export async function createAnnouncement(
+  teamId: number,
   a: Omit<AnnouncementRow, "id" | "createdAt" | "updatedAt">
 ): Promise<AnnouncementRow> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO announcements (title, body, author_name, category, feedback_date) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-    [a.title, a.body, a.authorName, a.category, a.feedbackDate]
+    "INSERT INTO announcements (team_id, title, body, author_name, category, feedback_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+    [teamId, a.title, a.body, a.authorName, a.category, a.feedbackDate]
   );
-  return (await getAnnouncement(rows[0].id))!;
+  return (await getAnnouncement(teamId, rows[0].id))!;
 }
 
 export async function updateAnnouncement(
+  teamId: number,
   id: number,
   patch: { title: string; body: string; feedbackDate?: string | null }
 ) {
   const pool = await ready();
   if (patch.feedbackDate !== undefined) {
     await pool.query(
-      "UPDATE announcements SET title=$1, body=$2, feedback_date=$3, updated_at=now() WHERE id=$4",
-      [patch.title, patch.body, patch.feedbackDate, id]
+      "UPDATE announcements SET title=$1, body=$2, feedback_date=$3, updated_at=now() WHERE id=$4 AND team_id=$5",
+      [patch.title, patch.body, patch.feedbackDate, id, teamId]
     );
     return;
   }
   await pool.query(
-    "UPDATE announcements SET title=$1, body=$2, updated_at=now() WHERE id=$3",
-    [patch.title, patch.body, id]
+    "UPDATE announcements SET title=$1, body=$2, updated_at=now() WHERE id=$3 AND team_id=$4",
+    [patch.title, patch.body, id, teamId]
   );
 }
 
-export async function deleteAnnouncement(id: number) {
+export async function deleteAnnouncement(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM announcements WHERE id=$1", [id]);
+  await pool.query("DELETE FROM announcements WHERE id=$1 AND team_id=$2", [id, teamId]);
 }
 
 // ---------- 명예의 전당 ----------
@@ -1031,26 +1153,31 @@ function toHallOfFame(r: {
   };
 }
 
-export async function listHallOfFame(): Promise<HallOfFameRow[]> {
+export async function listHallOfFame(teamId: number): Promise<HallOfFameRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM hall_of_fame ORDER BY year DESC");
+  const { rows } = await pool.query(
+    "SELECT * FROM hall_of_fame WHERE team_id=$1 ORDER BY year DESC",
+    [teamId]
+  );
   return rows.map(toHallOfFame);
 }
 
 export async function upsertHallOfFame(
+  teamId: number,
   entry: Omit<HallOfFameRow, "id">
 ): Promise<HallOfFameRow> {
   const pool = await ready();
   const { rows } = await pool.query(
-    `INSERT INTO hall_of_fame (year, captain_id, vice_captain_id, manager_id, top_scorer_id, top_assist_id, clean_sheet_first_id, overall_first_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (year) DO UPDATE SET
+    `INSERT INTO hall_of_fame (team_id, year, captain_id, vice_captain_id, manager_id, top_scorer_id, top_assist_id, clean_sheet_first_id, overall_first_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (team_id, year) DO UPDATE SET
        captain_id=EXCLUDED.captain_id, vice_captain_id=EXCLUDED.vice_captain_id,
        manager_id=EXCLUDED.manager_id, top_scorer_id=EXCLUDED.top_scorer_id,
        top_assist_id=EXCLUDED.top_assist_id, clean_sheet_first_id=EXCLUDED.clean_sheet_first_id,
        overall_first_id=EXCLUDED.overall_first_id
      RETURNING *`,
     [
+      teamId,
       entry.year,
       entry.captainId,
       entry.viceCaptainId,
@@ -1064,33 +1191,32 @@ export async function upsertHallOfFame(
   return toHallOfFame(rows[0]);
 }
 
-export async function deleteHallOfFame(id: number) {
+export async function deleteHallOfFame(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM hall_of_fame WHERE id=$1", [id]);
+  await pool.query("DELETE FROM hall_of_fame WHERE id=$1 AND team_id=$2", [id, teamId]);
 }
 
 // ---------- 웹 푸시 구독 ----------
-export async function savePushSubscription(sub: {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  memberId: number | null;
-}) {
+export async function savePushSubscription(
+  teamId: number,
+  sub: { endpoint: string; p256dh: string; auth: string; memberId: number | null }
+) {
   const pool = await ready();
   await pool.query(
-    `INSERT INTO push_subscriptions (endpoint, p256dh, auth, member_id)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO push_subscriptions (team_id, endpoint, p256dh, auth, member_id)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, member_id=EXCLUDED.member_id`,
-    [sub.endpoint, sub.p256dh, sub.auth, sub.memberId]
+    [teamId, sub.endpoint, sub.p256dh, sub.auth, sub.memberId]
   );
 }
 
-export async function getAllPushSubscriptions(): Promise<
-  { endpoint: string; p256dh: string; auth: string; memberId: number | null }[]
-> {
+export async function getAllPushSubscriptions(
+  teamId: number
+): Promise<{ endpoint: string; p256dh: string; auth: string; memberId: number | null }[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT endpoint, p256dh, auth, member_id AS \"memberId\" FROM push_subscriptions"
+    'SELECT endpoint, p256dh, auth, member_id AS "memberId" FROM push_subscriptions WHERE team_id=$1',
+    [teamId]
   );
   return rows;
 }
@@ -1128,27 +1254,35 @@ function toPollOption(r: {
   return { id: r.id, pollId: r.poll_id, label: r.label, order: r.order_idx };
 }
 
-export async function listPolls(): Promise<Poll[]> {
+export async function listPolls(teamId: number): Promise<Poll[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM polls ORDER BY created_at DESC");
+  const { rows } = await pool.query(
+    "SELECT * FROM polls WHERE team_id=$1 ORDER BY created_at DESC",
+    [teamId]
+  );
   return rows.map(toPoll);
 }
 
-export async function getPoll(id: number): Promise<Poll | null> {
+export async function getPoll(teamId: number, id: number): Promise<Poll | null> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM polls WHERE id=$1", [id]);
+  const { rows } = await pool.query(
+    "SELECT * FROM polls WHERE id=$1 AND team_id=$2",
+    [id, teamId]
+  );
   return rows[0] ? toPoll(rows[0]) : null;
 }
 
-export async function getAllPollOptions(): Promise<PollOption[]> {
+export async function getAllPollOptions(teamId: number): Promise<PollOption[]> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "SELECT * FROM poll_options ORDER BY poll_id, order_idx"
+    "SELECT * FROM poll_options WHERE team_id=$1 ORDER BY poll_id, order_idx",
+    [teamId]
   );
   return rows.map(toPollOption);
 }
 
 export async function createPoll(
+  teamId: number,
   title: string,
   options: string[],
   createdBy: number,
@@ -1159,15 +1293,15 @@ export async function createPoll(
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      "INSERT INTO polls (title, created_by, multi_select) VALUES ($1, $2, $3) RETURNING *",
-      [title, createdBy, multiSelect]
+      "INSERT INTO polls (team_id, title, created_by, multi_select) VALUES ($1, $2, $3, $4) RETURNING *",
+      [teamId, title, createdBy, multiSelect]
     );
     const poll = toPoll(rows[0]);
     let order = 0;
     for (const label of options) {
       await client.query(
-        "INSERT INTO poll_options (poll_id, label, order_idx) VALUES ($1, $2, $3)",
-        [poll.id, label, order++]
+        "INSERT INTO poll_options (team_id, poll_id, label, order_idx) VALUES ($1, $2, $3, $4)",
+        [teamId, poll.id, label, order++]
       );
     }
     await client.query("COMMIT");
@@ -1180,38 +1314,43 @@ export async function createPoll(
   }
 }
 
-export async function setPollClosed(id: number, closed: boolean) {
+export async function setPollClosed(teamId: number, id: number, closed: boolean) {
   const pool = await ready();
-  await pool.query("UPDATE polls SET closed=$1 WHERE id=$2", [closed, id]);
+  await pool.query("UPDATE polls SET closed=$1 WHERE id=$2 AND team_id=$3", [
+    closed,
+    id,
+    teamId,
+  ]);
 }
 
 export async function addPollOption(
+  teamId: number,
   pollId: number,
   label: string
 ): Promise<PollOption> {
   const pool = await ready();
   const { rows: maxRows } = await pool.query(
-    "SELECT COALESCE(MAX(order_idx), -1) AS m FROM poll_options WHERE poll_id=$1",
-    [pollId]
+    "SELECT COALESCE(MAX(order_idx), -1) AS m FROM poll_options WHERE poll_id=$1 AND team_id=$2",
+    [pollId, teamId]
   );
   const order = Number(maxRows[0].m) + 1;
   const { rows } = await pool.query(
-    "INSERT INTO poll_options (poll_id, label, order_idx) VALUES ($1, $2, $3) RETURNING *",
-    [pollId, label, order]
+    "INSERT INTO poll_options (team_id, poll_id, label, order_idx) VALUES ($1, $2, $3, $4) RETURNING *",
+    [teamId, pollId, label, order]
   );
   return toPollOption(rows[0]);
 }
 
-export async function deletePoll(id: number) {
+export async function deletePoll(teamId: number, id: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM poll_votes WHERE poll_id=$1", [id]);
-  await pool.query("DELETE FROM poll_options WHERE poll_id=$1", [id]);
-  await pool.query("DELETE FROM polls WHERE id=$1", [id]);
+  await pool.query("DELETE FROM poll_votes WHERE poll_id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM poll_options WHERE poll_id=$1 AND team_id=$2", [id, teamId]);
+  await pool.query("DELETE FROM polls WHERE id=$1 AND team_id=$2", [id, teamId]);
 }
 
-export async function getAllPollVotes(): Promise<PollVoteRow[]> {
+export async function getAllPollVotes(teamId: number): Promise<PollVoteRow[]> {
   const pool = await ready();
-  const { rows } = await pool.query("SELECT * FROM poll_votes");
+  const { rows } = await pool.query("SELECT * FROM poll_votes WHERE team_id=$1", [teamId]);
   return rows.map((r) => ({
     pollId: r.poll_id,
     memberId: r.member_id,
@@ -1220,6 +1359,7 @@ export async function getAllPollVotes(): Promise<PollVoteRow[]> {
 }
 
 export async function setPollVote(
+  teamId: number,
   pollId: number,
   memberId: number,
   optionIds: number[]
@@ -1229,13 +1369,13 @@ export async function setPollVote(
   try {
     await client.query("BEGIN");
     await client.query(
-      "DELETE FROM poll_votes WHERE poll_id=$1 AND member_id=$2",
-      [pollId, memberId]
+      "DELETE FROM poll_votes WHERE poll_id=$1 AND member_id=$2 AND team_id=$3",
+      [pollId, memberId, teamId]
     );
     for (const optionId of optionIds) {
       await client.query(
-        "INSERT INTO poll_votes (poll_id, member_id, option_id) VALUES ($1, $2, $3)",
-        [pollId, memberId, optionId]
+        "INSERT INTO poll_votes (team_id, poll_id, member_id, option_id) VALUES ($1, $2, $3, $4)",
+        [teamId, pollId, memberId, optionId]
       );
     }
     await client.query("COMMIT");

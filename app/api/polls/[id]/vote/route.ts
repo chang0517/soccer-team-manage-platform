@@ -7,7 +7,9 @@ export async function POST(
 ) {
   const { id } = await params;
   const pollId = Number(id);
-  const poll = await getPoll(pollId);
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  const poll = await getPoll(session.teamId, pollId);
   if (!poll) return Response.json({ error: "not found" }, { status: 404 });
   if (poll.closed) {
     return Response.json({ error: "마감된 투표예요." }, { status: 403 });
@@ -28,8 +30,7 @@ export async function POST(
     );
   }
 
-  const session = await getSessionUser();
-  if (!session || (session.role !== "admin" && session.memberId !== memberId)) {
+  if (session.role !== "admin" && session.memberId !== memberId) {
     return Response.json(
       { error: "본인 투표만 등록할 수 있어요." },
       { status: 403 }
@@ -37,12 +38,14 @@ export async function POST(
   }
 
   const validOptionIds = new Set(
-    (await getAllPollOptions()).filter((o) => o.pollId === pollId).map((o) => o.id)
+    (await getAllPollOptions(session.teamId))
+      .filter((o) => o.pollId === pollId)
+      .map((o) => o.id)
   );
   if (!optionIds.every((oid) => validOptionIds.has(oid))) {
     return Response.json({ error: "잘못된 보기예요." }, { status: 400 });
   }
 
-  await setPollVote(pollId, memberId, optionIds);
+  await setPollVote(session.teamId, pollId, memberId, optionIds);
   return Response.json({ ok: true });
 }

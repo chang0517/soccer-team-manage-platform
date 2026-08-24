@@ -9,14 +9,16 @@ import {
 import { buildPollDetails } from "@/lib/polls";
 
 export async function GET(request: Request) {
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const viewerMemberId = Number(
     new URL(request.url).searchParams.get("memberId")
   );
   const [polls, options, votes, members] = await Promise.all([
-    listPolls(),
-    getAllPollOptions(),
-    getAllPollVotes(),
-    listMembers(),
+    listPolls(session.teamId),
+    getAllPollOptions(session.teamId),
+    getAllPollVotes(session.teamId),
+    listMembers(session.teamId),
   ]);
   return Response.json(
     buildPollDetails(
@@ -49,6 +51,6 @@ export async function POST(request: Request) {
     );
   }
   const multiSelect = body?.multiSelect !== false;
-  const poll = await createPoll(title, options, session.memberId, multiSelect);
+  const poll = await createPoll(session.teamId, title, options, session.memberId, multiSelect);
   return Response.json(poll, { status: 201 });
 }

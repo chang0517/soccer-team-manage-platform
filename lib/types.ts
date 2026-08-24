@@ -1,3 +1,15 @@
+// 멀티테넌트: 한 앱을 여러 팀이 함께 쓴다. 모든 데이터 테이블은 team_id로
+// 스코프되고, 세션에 담긴 teamId가 모든 쿼리의 유일한 신뢰 출처다 —
+// 클라이언트가 다른 팀의 teamId를 보내도 서버는 세션의 teamId만 쓴다.
+export interface TeamRow {
+  id: number;
+  slug: string;
+  name: string;
+  fineAccount: string;
+  fineAmount: string;
+  createdAt: string;
+}
+
 export type PosGroup = "GK" | "CB" | "WB" | "DM" | "AM" | "WG" | "ST";
 
 export const POS_GROUPS: PosGroup[] = ["GK", "CB", "WB", "DM", "AM", "WG", "ST"];
@@ -56,6 +68,7 @@ export type UserStatus = "pending" | "approved" | "rejected";
 
 export interface AppUser {
   id: number;
+  teamId: number;
   username: string;
   displayName: string;
   role: UserRole;
@@ -72,6 +85,7 @@ export interface AppUser {
 
 export interface SessionUser {
   id: number;
+  teamId: number;
   username: string;
   displayName: string;
   role: UserRole;

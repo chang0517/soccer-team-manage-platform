@@ -1,12 +1,18 @@
 import { setSessionCookie, verifyPassword } from "@/lib/auth";
-import { getUserByUsername } from "@/lib/db";
+import { getTeamBySlug, getUserByUsername } from "@/lib/db";
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const teamSlug = String(body?.teamSlug ?? "").trim();
   const username = String(body?.username ?? "").trim();
   const password = String(body?.password ?? "");
 
-  const user = await getUserByUsername(username);
+  const team = await getTeamBySlug(teamSlug);
+  if (!team) {
+    return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
+  }
+
+  const user = await getUserByUsername(team.id, username);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return Response.json(
       { error: "아이디 또는 비밀번호가 올바르지 않아요." },
@@ -25,6 +31,7 @@ export async function POST(request: Request) {
 
   await setSessionCookie({
     id: user.id,
+    teamId: user.teamId,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
@@ -32,6 +39,7 @@ export async function POST(request: Request) {
   });
   return Response.json({
     id: user.id,
+    teamId: user.teamId,
     username: user.username,
     displayName: user.displayName,
     role: user.role,

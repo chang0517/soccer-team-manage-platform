@@ -5,10 +5,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 삭제할 수 있어요." }, { status: 403 });
   }
   const { id } = await params;
-  await deleteHallOfFame(Number(id));
+  await deleteHallOfFame(admin.teamId, Number(id));
   return Response.json({ ok: true });
 }

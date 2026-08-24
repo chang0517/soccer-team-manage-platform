@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/auth";
 import { saveRecords, updateEvent } from "@/lib/db";
 import type { RecordRow } from "@/lib/types";
 
@@ -5,6 +6,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const { id } = await params;
   const eventId = Number(id);
   const body = await request.json();
@@ -13,7 +16,7 @@ export async function POST(
     body.conceded !== undefined ||
     body.recordLog !== undefined
   ) {
-    await updateEvent(eventId, {
+    await updateEvent(session.teamId, eventId, {
       scored: body.scored === null || body.scored === "" ? null : Number(body.scored),
       conceded:
         body.conceded === null || body.conceded === "" ? null : Number(body.conceded),
@@ -30,6 +33,6 @@ export async function POST(
       position: r.position ?? "",
     })
   );
-  await saveRecords(eventId, records);
+  await saveRecords(session.teamId, eventId, records);
   return Response.json({ ok: true });
 }

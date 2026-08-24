@@ -1,6 +1,7 @@
 import {
   createPhoneVerification,
   getLatestPhoneVerification,
+  getTeamBySlug,
   getUserByUsername,
   listMembers,
 } from "@/lib/db";
@@ -10,16 +11,21 @@ import { sendSms } from "@/lib/sms";
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const teamSlug = String(body?.teamSlug ?? "").trim();
   const username = String(body?.username ?? "").trim();
   if (!username) {
     return Response.json({ error: "아이디를 입력해 주세요." }, { status: 400 });
   }
+  const team = await getTeamBySlug(teamSlug);
+  if (!team) {
+    return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
+  }
 
-  const user = await getUserByUsername(username);
+  const user = await getUserByUsername(team.id, username);
   if (!user) {
     return Response.json({ error: "존재하지 않는 아이디예요." }, { status: 404 });
   }
-  const members = user.memberId ? await listMembers() : [];
+  const members = user.memberId ? await listMembers(team.id) : [];
   const member = members.find((m) => m.id === user.memberId);
   if (!member?.phone) {
     return Response.json(
@@ -28,7 +34,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const recent = await getLatestPhoneVerification(member.phone, "reset_password");
+  const recent = await getLatestPhoneVerification(team.id, member.phone, "reset_password");
   if (
     recent &&
     !recent.consumed &&
@@ -38,7 +44,7 @@ export async function POST(request: Request) {
   }
 
   const code = generateCode();
-  await createPhoneVerification({
+  await createPhoneVerification(team.id, {
     phone: member.phone,
     purpose: "reset_password",
     code,
@@ -48,7 +54,7 @@ export async function POST(request: Request) {
   try {
     await sendSms(
       member.phone,
-      `[Raven FC] 비밀번호 재설정 인증번호는 ${code} 입니다. (5분간 유효)`
+      `[${team.name}] 비밀번호 재설정 인증번호는 ${code} 입니다. (5분간 유효)`
     );
   } catch (e) {
     return Response.json(

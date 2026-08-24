@@ -13,7 +13,7 @@ export async function POST(
   const action = body?.action;
 
   if (action === "reject") {
-    await updateUserStatus(Number(id), "rejected", null);
+    await updateUserStatus(admin.teamId, Number(id), "rejected", null);
     return Response.json({ ok: true });
   }
 
@@ -24,7 +24,7 @@ export async function POST(
         body.newMember.backNo != null && Number.isFinite(Number(body.newMember.backNo))
           ? Number(body.newMember.backNo)
           : null;
-      const created = await createMember({
+      const created = await createMember(admin.teamId, {
         name: body.newMember.name,
         backNo,
         pos1: body.newMember.pos1 ?? "CB",
@@ -35,7 +35,7 @@ export async function POST(
       memberId = created.id;
     }
     const role = body?.role === "admin" || body?.role === "player" ? body.role : undefined;
-    await updateUserStatus(Number(id), "approved", memberId, role);
+    await updateUserStatus(admin.teamId, Number(id), "approved", memberId, role);
     return Response.json({ ok: true, memberId });
   }
 

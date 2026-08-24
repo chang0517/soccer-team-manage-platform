@@ -2,7 +2,9 @@ import { getSessionUser } from "@/lib/auth";
 import { createAnnouncement, listAnnouncements } from "@/lib/db";
 
 export async function GET() {
-  return Response.json(await listAnnouncements());
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  return Response.json(await listAnnouncements(session.teamId));
 }
 
 export async function POST(request: Request) {
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
   if (category === "coach_feedback" && !feedbackDate) {
     return Response.json({ error: "날짜를 선택해 주세요." }, { status: 400 });
   }
-  const announcement = await createAnnouncement({
+  const announcement = await createAnnouncement(session.teamId, {
     title,
     body: text,
     authorName: session.displayName,

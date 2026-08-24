@@ -7,13 +7,14 @@ export async function GET() {
 
   // 세션 쿠키는 로그인 시점 정보를 담고 있으니, 승인/역할 변경을 바로
   // 반영하도록 DB에서 최신 상태를 다시 확인한다.
-  const user = await getUserById(session.id);
+  const user = await getUserById(session.teamId, session.id);
   if (!user || user.status !== "approved") {
     return Response.json({ user: null });
   }
   return Response.json({
     user: {
       id: user.id,
+      teamId: user.teamId,
       username: user.username,
       displayName: user.displayName,
       role: user.role,

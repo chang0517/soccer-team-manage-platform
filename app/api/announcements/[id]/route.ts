@@ -1,12 +1,14 @@
-import { requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { deleteAnnouncement, getAnnouncement, updateAnnouncement } from "@/lib/db";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const { id } = await params;
-  const announcement = await getAnnouncement(Number(id));
+  const announcement = await getAnnouncement(session.teamId, Number(id));
   if (!announcement) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(announcement);
 }
@@ -15,7 +17,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 수정할 수 있어요." }, { status: 403 });
   }
   const { id } = await params;
@@ -32,7 +35,7 @@ export async function PATCH(
   if (body?.feedbackDate !== undefined) {
     patch.feedbackDate = String(body.feedbackDate ?? "").trim() || null;
   }
-  await updateAnnouncement(Number(id), patch);
+  await updateAnnouncement(admin.teamId, Number(id), patch);
   return Response.json({ ok: true });
 }
 
@@ -40,10 +43,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 삭제할 수 있어요." }, { status: 403 });
   }
   const { id } = await params;
-  await deleteAnnouncement(Number(id));
+  await deleteAnnouncement(admin.teamId, Number(id));
   return Response.json({ ok: true });
 }

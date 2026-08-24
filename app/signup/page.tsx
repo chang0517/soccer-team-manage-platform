@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 import { POS_GROUPS, POS_LABELS } from "@/lib/types";
 import type { PosGroup } from "@/lib/types";
 
 export default function SignupPage() {
-  const router = useRouter();
+  const [teamSlug, setTeamSlug] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -19,8 +19,17 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [pendingMsg, setPendingMsg] = useState("");
 
+  useEffect(() => {
+    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
+  }, []);
+
   const submit = async () => {
-    if (username.trim().length < 3 || password.length < 4 || !displayName.trim())
+    if (
+      !teamSlug.trim() ||
+      username.trim().length < 3 ||
+      password.length < 4 ||
+      !displayName.trim()
+    )
       return;
     setLoading(true);
     setError("");
@@ -28,6 +37,7 @@ export default function SignupPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        teamSlug: teamSlug.trim(),
         username: username.trim(),
         password,
         displayName: displayName.trim(),
@@ -43,11 +53,7 @@ export default function SignupPage() {
       setError(data.error || "가입에 실패했어요.");
       return;
     }
-    if (data.autoApproved) {
-      router.push("/");
-      router.refresh();
-      return;
-    }
+    localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
     setPendingMsg(
       "가입 요청이 접수됐어요. 운영진이 이름을 확인하고 승인하면 로그인할 수 있어요."
     );
@@ -74,6 +80,15 @@ export default function SignupPage() {
     <div className="mx-auto max-w-sm space-y-4 pt-10">
       <h1 className="text-center text-lg font-bold">가입하기</h1>
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div>
+          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
+          <input
+            className={input}
+            placeholder="운영진에게 받은 팀 코드"
+            value={teamSlug}
+            onChange={(e) => setTeamSlug(e.target.value)}
+          />
+        </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">이름</label>
           <input
@@ -155,6 +170,7 @@ export default function SignupPage() {
           onClick={submit}
           disabled={
             loading ||
+            !teamSlug.trim() ||
             username.trim().length < 3 ||
             password.length < 4 ||
             !displayName.trim()

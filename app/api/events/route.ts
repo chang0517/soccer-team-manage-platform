@@ -1,14 +1,17 @@
-import { requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { createEvent, listEvents } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { sendPushToAll } from "@/lib/push";
 
 export async function GET() {
-  return Response.json(await listEvents());
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  return Response.json(await listEvents(session.teamId));
 }
 
 export async function POST(request: Request) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return Response.json({ error: "운영진만 일정을 추가할 수 있어요." }, { status: 403 });
   }
   const body = await request.json();
@@ -18,7 +21,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const event = await createEvent({
+  const event = await createEvent(admin.teamId, {
     title: body.title.trim(),
     type: body.type === "social" ? "social" : "match",
     date: body.date,
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
 
   if (event.type === "match") {
     const opponentPart = event.opponent ? ` vs ${event.opponent}` : "";
-    await sendPushToAll({
+    await sendPushToAll(admin.teamId, {
       title: "⚽ 새 경기 일정이 등록됐어요",
       body: `${event.title}${opponentPart} · ${formatDate(event.date, event.time)} — 참석 투표를 해주세요!`,
       url: `/events/${event.id}`,

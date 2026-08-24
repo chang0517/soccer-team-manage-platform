@@ -12,7 +12,7 @@ export async function GET(
   }
 
   const { jobId } = await params;
-  const job = await getTacticsJob(Number(jobId));
+  const job = await getTacticsJob(session.teamId, Number(jobId));
   if (!job) return Response.json({ error: "not found" }, { status: 404 });
 
   return Response.json({
@@ -38,7 +38,7 @@ export async function DELETE(
   }
 
   const { jobId } = await params;
-  const job = await getTacticsJob(Number(jobId));
+  const job = await getTacticsJob(session.teamId, Number(jobId));
   if (!job) return Response.json({ error: "not found" }, { status: 404 });
   if (job.userId !== session.id) {
     return Response.json({ error: "본인이 만든 작업만 취소할 수 있어요." }, { status: 403 });

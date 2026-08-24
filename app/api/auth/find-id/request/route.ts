@@ -1,6 +1,7 @@
 import {
   createPhoneVerification,
   getLatestPhoneVerification,
+  getTeamBySlug,
   getUsersByMemberId,
   listMembers,
 } from "@/lib/db";
@@ -10,12 +11,17 @@ import { sendSms } from "@/lib/sms";
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const teamSlug = String(body?.teamSlug ?? "").trim();
   const phone = String(body?.phone ?? "").trim();
   if (!phone) {
     return Response.json({ error: "휴대폰 번호를 입력해 주세요." }, { status: 400 });
   }
+  const team = await getTeamBySlug(teamSlug);
+  if (!team) {
+    return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
+  }
 
-  const members = await listMembers();
+  const members = await listMembers(team.id);
   const member = members.find((m) => m.phone && matchesPhone(m.phone, phone));
   if (!member) {
     return Response.json(
@@ -23,7 +29,7 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
-  const users = await getUsersByMemberId(member.id);
+  const users = await getUsersByMemberId(team.id, member.id);
   const activeUsers = users.filter((u) => u.status !== "rejected");
   if (activeUsers.length === 0) {
     return Response.json(
@@ -32,7 +38,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const recent = await getLatestPhoneVerification(phone, "find_id");
+  const recent = await getLatestPhoneVerification(team.id, phone, "find_id");
   if (
     recent &&
     !recent.consumed &&
@@ -42,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   const code = generateCode();
-  await createPhoneVerification({
+  await createPhoneVerification(team.id, {
     phone,
     purpose: "find_id",
     code,
@@ -50,7 +56,7 @@ export async function POST(request: Request) {
   });
 
   try {
-    await sendSms(phone, `[Raven FC] 아이디 찾기 인증번호는 ${code} 입니다. (5분간 유효)`);
+    await sendSms(phone, `[${team.name}] 아이디 찾기 인증번호는 ${code} 입니다. (5분간 유효)`);
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : "SMS 발송에 실패했어요." },

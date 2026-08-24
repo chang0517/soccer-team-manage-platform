@@ -1,8 +1,10 @@
-import { requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { createMember, listMembers } from "@/lib/db";
 
 export async function GET() {
-  return Response.json(await listMembers());
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  return Response.json(await listMembers(session.teamId));
 }
 
 export async function POST(request: Request) {
@@ -11,10 +13,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "이름은 필수입니다." }, { status: 400 });
   }
   // 용병(임시 참가자) 추가는 누구나, 정식 멤버 등록은 운영진만.
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   if (!body.isGuest && !(await requireAdmin())) {
     return Response.json({ error: "운영진만 멤버를 추가할 수 있어요." }, { status: 403 });
   }
-  const member = await createMember({
+  const member = await createMember(session.teamId, {
     name: body.name.trim(),
     backNo: body.backNo ?? null,
     pos1: body.pos1 ?? "CB",

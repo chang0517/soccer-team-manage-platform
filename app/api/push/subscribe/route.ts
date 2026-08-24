@@ -10,11 +10,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "잘못된 구독 정보예요." }, { status: 400 });
   }
   const session = await getSessionUser();
-  await savePushSubscription({
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  await savePushSubscription(session.teamId, {
     endpoint,
     p256dh,
     auth,
-    memberId: session?.memberId ?? null,
+    memberId: session.memberId ?? null,
   });
   return Response.json({ ok: true });
 }

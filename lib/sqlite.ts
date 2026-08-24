@@ -1,7 +1,6 @@
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
-import { ROSTER } from "./roster";
 import type {
   AnnouncementCategory,
   AnnouncementRow,
@@ -22,6 +21,7 @@ import type {
   TacticsJobRow,
   TacticsJobStatus,
   TacticsScene,
+  TeamRow,
   UserRole,
   UserStatus,
   VerificationPurpose,
@@ -29,16 +29,25 @@ import type {
   VoteStatus,
 } from "./types";
 
-const globalForDb = globalThis as unknown as { ravenDb?: Database.Database };
+const globalForDb = globalThis as unknown as { platformDb?: Database.Database };
 
 function createDb(): Database.Database {
   const dir = path.join(process.cwd(), "data");
   fs.mkdirSync(dir, { recursive: true });
-  const db = new Database(path.join(dir, "raven.db"));
+  const db = new Database(path.join(dir, "platform.db"));
   db.pragma("journal_mode = WAL");
   db.exec(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      fine_account TEXT NOT NULL DEFAULT '',
+      fine_amount TEXT NOT NULL DEFAULT '20,000원',
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS members (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       back_no INTEGER,
       pos1 TEXT NOT NULL DEFAULT 'CB',
@@ -48,6 +57,7 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'match',
       date TEXT NOT NULL,
@@ -67,12 +77,14 @@ function createDb(): Database.Database {
       equipment_reminder_sent INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS votes (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       status TEXT NOT NULL,
       PRIMARY KEY (event_id, member_id)
     );
     CREATE TABLE IF NOT EXISTS records (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       played INTEGER NOT NULL DEFAULT 0,
@@ -82,6 +94,7 @@ function createDb(): Database.Database {
       PRIMARY KEY (event_id, member_id)
     );
     CREATE TABLE IF NOT EXISTS mvp_votes (
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       voter_id INTEGER NOT NULL,
       votee_id INTEGER NOT NULL,
@@ -89,7 +102,8 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
+      team_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       display_name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'player',
@@ -99,16 +113,19 @@ function createDb(): Database.Database {
       draft_pos1 TEXT,
       draft_pos2 TEXT,
       draft_back_no INTEGER,
-      draft_phone TEXT
+      draft_phone TEXT,
+      UNIQUE (team_id, username)
     );
     CREATE TABLE IF NOT EXISTS comments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS historical_stats (
+      team_id INTEGER NOT NULL,
       member_id INTEGER PRIMARY KEY,
       games INTEGER NOT NULL DEFAULT 0,
       goals INTEGER NOT NULL DEFAULT 0,
@@ -118,6 +135,7 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       author_name TEXT NOT NULL,
@@ -128,17 +146,20 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS hall_of_fame (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      year INTEGER NOT NULL UNIQUE,
+      team_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
       captain_id INTEGER,
       vice_captain_id INTEGER,
       manager_id INTEGER,
       top_scorer_id INTEGER,
       top_assist_id INTEGER,
       clean_sheet_first_id INTEGER,
-      overall_first_id INTEGER
+      overall_first_id INTEGER,
+      UNIQUE (team_id, year)
     );
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       endpoint TEXT NOT NULL UNIQUE,
       p256dh TEXT NOT NULL,
       auth TEXT NOT NULL,
@@ -147,6 +168,7 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS polls (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       created_by INTEGER NOT NULL,
       created_at TEXT NOT NULL,
@@ -155,11 +177,13 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS poll_options (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       poll_id INTEGER NOT NULL,
       label TEXT NOT NULL,
       order_idx INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS poll_votes (
+      team_id INTEGER NOT NULL,
       poll_id INTEGER NOT NULL,
       member_id INTEGER NOT NULL,
       option_id INTEGER NOT NULL,
@@ -167,6 +191,7 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS phone_verifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       phone TEXT NOT NULL,
       purpose TEXT NOT NULL,
       code TEXT NOT NULL,
@@ -177,6 +202,7 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS tactics_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -187,104 +213,77 @@ function createDb(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
-  const memberCols = db.prepare("PRAGMA table_info(members)").all() as { name: string }[];
-  if (!memberCols.some((c) => c.name === "is_guest")) {
-    db.exec("ALTER TABLE members ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0");
-  }
-  if (!memberCols.some((c) => c.name === "phone")) {
-    db.exec("ALTER TABLE members ADD COLUMN phone TEXT");
-  }
-  const eventCols = db.prepare("PRAGMA table_info(events)").all() as { name: string }[];
-  for (const col of ["duty_offense", "duty_defense", "water_duty", "icebox_duty"]) {
-    if (!eventCols.some((c) => c.name === col)) {
-      db.exec(`ALTER TABLE events ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
-    }
-  }
-  if (!eventCols.some((c) => c.name === "record_log")) {
-    db.exec("ALTER TABLE events ADD COLUMN record_log TEXT");
-  }
-  if (!eventCols.some((c) => c.name === "equipment_reminder_sent")) {
-    db.exec(
-      "ALTER TABLE events ADD COLUMN equipment_reminder_sent INTEGER NOT NULL DEFAULT 0"
-    );
-  }
-  if (!eventCols.some((c) => c.name === "scrimmage_squad")) {
-    db.exec("ALTER TABLE events ADD COLUMN scrimmage_squad TEXT");
-  }
-  const hofCols = db.prepare("PRAGMA table_info(hall_of_fame)").all() as { name: string }[];
-  if (hofCols.length > 0 && !hofCols.some((c) => c.name === "clean_sheet_first_id")) {
-    db.exec("ALTER TABLE hall_of_fame ADD COLUMN clean_sheet_first_id INTEGER");
-  }
-  const histCols = db.prepare("PRAGMA table_info(historical_stats)").all() as {
-    name: string;
-  }[];
-  if (histCols.length > 0 && !histCols.some((c) => c.name === "bonus_pts")) {
-    db.exec("ALTER TABLE historical_stats ADD COLUMN bonus_pts REAL NOT NULL DEFAULT 0");
-  }
-  const pollCols = db.prepare("PRAGMA table_info(polls)").all() as { name: string }[];
-  if (pollCols.length > 0 && !pollCols.some((c) => c.name === "multi_select")) {
-    db.exec("ALTER TABLE polls ADD COLUMN multi_select INTEGER NOT NULL DEFAULT 1");
-  }
-  const tacticsJobCols = db.prepare("PRAGMA table_info(tactics_jobs)").all() as {
-    name: string;
-  }[];
-  if (tacticsJobCols.length > 0 && !tacticsJobCols.some((c) => c.name === "raw_response")) {
-    db.exec("ALTER TABLE tactics_jobs ADD COLUMN raw_response TEXT");
-  }
-  if (tacticsJobCols.length > 0 && !tacticsJobCols.some((c) => c.name === "model")) {
-    db.exec("ALTER TABLE tactics_jobs ADD COLUMN model TEXT NOT NULL DEFAULT ''");
-  }
-  const userCols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-  for (const col of ["draft_pos1", "draft_pos2"]) {
-    if (!userCols.some((c) => c.name === col)) {
-      db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
-    }
-  }
-  if (!userCols.some((c) => c.name === "draft_back_no")) {
-    db.exec("ALTER TABLE users ADD COLUMN draft_back_no INTEGER");
-  }
-  if (!userCols.some((c) => c.name === "draft_phone")) {
-    db.exec("ALTER TABLE users ADD COLUMN draft_phone TEXT");
-  }
-  const announcementCols = db.prepare("PRAGMA table_info(announcements)").all() as {
-    name: string;
-  }[];
-  if (
-    announcementCols.length > 0 &&
-    !announcementCols.some((c) => c.name === "category")
-  ) {
-    db.exec("ALTER TABLE announcements ADD COLUMN category TEXT NOT NULL DEFAULT 'notice'");
-  }
-  if (
-    announcementCols.length > 0 &&
-    !announcementCols.some((c) => c.name === "feedback_date")
-  ) {
-    db.exec("ALTER TABLE announcements ADD COLUMN feedback_date TEXT");
-  }
-  seedIfEmpty(db);
   return db;
 }
 
 export function getDb(): Database.Database {
-  if (!globalForDb.ravenDb) globalForDb.ravenDb = createDb();
-  return globalForDb.ravenDb;
+  if (!globalForDb.platformDb) globalForDb.platformDb = createDb();
+  return globalForDb.platformDb;
 }
 
-function seedIfEmpty(db: Database.Database) {
-  const count = db.prepare("SELECT COUNT(*) AS c FROM members").get() as {
-    c: number;
-  };
-  if (count.c > 0) return;
+// ---------- teams ----------
+type TeamDbRow = {
+  id: number;
+  slug: string;
+  name: string;
+  fine_account: string;
+  fine_amount: string;
+  created_at: string;
+};
 
-  const insM = db.prepare(
-    "INSERT INTO members (name, back_no, pos1, pos2, is_guest) VALUES (?, NULL, ?, ?, 0)"
-  );
-  for (const [name, p1, p2] of ROSTER) insM.run(name, p1, p2);
+function toTeam(r: TeamDbRow): TeamRow {
+  return {
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    fineAccount: r.fine_account,
+    fineAmount: r.fine_amount,
+    createdAt: r.created_at,
+  };
+}
+
+export function getTeamBySlug(slug: string): TeamRow | null {
+  const r = getDb().prepare("SELECT * FROM teams WHERE slug=?").get(slug) as
+    | TeamDbRow
+    | undefined;
+  return r ? toTeam(r) : null;
+}
+
+export function getTeamById(id: number): TeamRow | null {
+  const r = getDb().prepare("SELECT * FROM teams WHERE id=?").get(id) as
+    | TeamDbRow
+    | undefined;
+  return r ? toTeam(r) : null;
+}
+
+export function createTeam(t: { slug: string; name: string }): TeamRow {
+  const createdAt = new Date().toISOString();
+  const r = getDb()
+    .prepare("INSERT INTO teams (slug, name, created_at) VALUES (?, ?, ?)")
+    .run(t.slug, t.name, createdAt);
+  return getTeamById(Number(r.lastInsertRowid))!;
+}
+
+export function listTeams(): TeamRow[] {
+  const rows = getDb().prepare("SELECT * FROM teams ORDER BY id").all() as TeamDbRow[];
+  return rows.map(toTeam);
+}
+
+export function updateTeamFineSettings(
+  teamId: number,
+  patch: { fineAccount?: string; fineAmount?: string }
+) {
+  const cur = getTeamById(teamId);
+  if (!cur) return;
+  getDb()
+    .prepare("UPDATE teams SET fine_account=?, fine_amount=? WHERE id=?")
+    .run(patch.fineAccount ?? cur.fineAccount, patch.fineAmount ?? cur.fineAmount, teamId);
 }
 
 // ---------- members ----------
 type MemberDbRow = {
   id: number;
+  team_id: number;
   name: string;
   back_no: number | null;
   pos1: PosGroup;
@@ -305,41 +304,51 @@ function toMember(r: MemberDbRow): Member {
   };
 }
 
-export function listMembers(): Member[] {
+export function listMembers(teamId: number): Member[] {
   const rows = getDb()
-    .prepare("SELECT * FROM members ORDER BY name")
-    .all() as MemberDbRow[];
+    .prepare("SELECT * FROM members WHERE team_id=? ORDER BY name")
+    .all(teamId) as MemberDbRow[];
   return rows.map(toMember);
 }
 
-export function createMember(m: Omit<Member, "id">): Member {
+export function getMember(teamId: number, id: number): Member | null {
+  const r = getDb()
+    .prepare("SELECT * FROM members WHERE id=? AND team_id=?")
+    .get(id, teamId) as MemberDbRow | undefined;
+  return r ? toMember(r) : null;
+}
+
+export function createMember(teamId: number, m: Omit<Member, "id">): Member {
   const r = getDb()
     .prepare(
-      "INSERT INTO members (name, back_no, pos1, pos2, is_guest, phone) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO members (team_id, name, back_no, pos1, pos2, is_guest, phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(m.name, m.backNo, m.pos1, m.pos2, m.isGuest ? 1 : 0, m.phone ?? null);
+    .run(teamId, m.name, m.backNo, m.pos1, m.pos2, m.isGuest ? 1 : 0, m.phone ?? null);
   return { id: Number(r.lastInsertRowid), ...m };
 }
 
-export function updateMember(id: number, m: Omit<Member, "id">) {
+export function updateMember(teamId: number, id: number, m: Omit<Member, "id">) {
   getDb()
     .prepare(
-      "UPDATE members SET name=?, back_no=?, pos1=?, pos2=?, is_guest=?, phone=? WHERE id=?"
+      "UPDATE members SET name=?, back_no=?, pos1=?, pos2=?, is_guest=?, phone=? WHERE id=? AND team_id=?"
     )
-    .run(m.name, m.backNo, m.pos1, m.pos2, m.isGuest ? 1 : 0, m.phone ?? null, id);
+    .run(m.name, m.backNo, m.pos1, m.pos2, m.isGuest ? 1 : 0, m.phone ?? null, id, teamId);
 }
 
-export function deleteMember(id: number) {
+export function deleteMember(teamId: number, id: number) {
   const db = getDb();
-  db.prepare("DELETE FROM members WHERE id=?").run(id);
-  db.prepare("DELETE FROM votes WHERE member_id=?").run(id);
-  db.prepare("DELETE FROM records WHERE member_id=?").run(id);
-  db.prepare("DELETE FROM mvp_votes WHERE voter_id=? OR votee_id=?").run(id, id);
+  db.prepare("DELETE FROM members WHERE id=? AND team_id=?").run(id, teamId);
+  db.prepare("DELETE FROM votes WHERE member_id=? AND team_id=?").run(id, teamId);
+  db.prepare("DELETE FROM records WHERE member_id=? AND team_id=?").run(id, teamId);
+  db.prepare(
+    "DELETE FROM mvp_votes WHERE (voter_id=? OR votee_id=?) AND team_id=?"
+  ).run(id, id, teamId);
 }
 
 // ---------- events ----------
 type EventDbRow = {
   id: number;
+  team_id: number;
   title: string;
   type: "match" | "social";
   date: string;
@@ -382,21 +391,22 @@ function toEvent(r: EventDbRow): EventItem {
   };
 }
 
-export function listEvents(): EventItem[] {
+export function listEvents(teamId: number): EventItem[] {
   const rows = getDb()
-    .prepare("SELECT * FROM events ORDER BY date DESC, time DESC")
-    .all() as EventDbRow[];
+    .prepare("SELECT * FROM events WHERE team_id=? ORDER BY date DESC, time DESC")
+    .all(teamId) as EventDbRow[];
   return rows.map(toEvent);
 }
 
-export function getEvent(id: number): EventItem | null {
-  const r = getDb().prepare("SELECT * FROM events WHERE id=?").get(id) as
-    | EventDbRow
-    | undefined;
+export function getEvent(teamId: number, id: number): EventItem | null {
+  const r = getDb()
+    .prepare("SELECT * FROM events WHERE id=? AND team_id=?")
+    .get(id, teamId) as EventDbRow | undefined;
   return r ? toEvent(r) : null;
 }
 
 export function createEvent(
+  teamId: number,
   e: Omit<
     EventItem,
     "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
@@ -404,9 +414,10 @@ export function createEvent(
 ): EventItem {
   const r = getDb()
     .prepare(
-      "INSERT INTO events (title, type, date, time, location, opponent, notes, duty_offense, duty_defense, water_duty, icebox_duty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, water_duty, icebox_duty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
+      teamId,
       e.title,
       e.type,
       e.date,
@@ -419,16 +430,16 @@ export function createEvent(
       e.waterDuty ?? "",
       e.iceboxDuty ?? ""
     );
-  return getEvent(Number(r.lastInsertRowid))!;
+  return getEvent(teamId, Number(r.lastInsertRowid))!;
 }
 
-export function updateEvent(id: number, patch: Partial<EventItem>) {
-  const cur = getEvent(id);
+export function updateEvent(teamId: number, id: number, patch: Partial<EventItem>) {
+  const cur = getEvent(teamId, id);
   if (!cur) return;
   const next = { ...cur, ...patch };
   getDb()
     .prepare(
-      "UPDATE events SET title=?, type=?, date=?, time=?, location=?, opponent=?, scored=?, conceded=?, squad=?, scrimmage_squad=?, notes=?, duty_offense=?, duty_defense=?, water_duty=?, icebox_duty=?, record_log=?, equipment_reminder_sent=? WHERE id=?"
+      "UPDATE events SET title=?, type=?, date=?, time=?, location=?, opponent=?, scored=?, conceded=?, squad=?, scrimmage_squad=?, notes=?, duty_offense=?, duty_defense=?, water_duty=?, icebox_duty=?, record_log=?, equipment_reminder_sent=? WHERE id=? AND team_id=?"
     )
     .run(
       next.title,
@@ -448,23 +459,24 @@ export function updateEvent(id: number, patch: Partial<EventItem>) {
       next.iceboxDuty ?? "",
       next.recordLog ? JSON.stringify(next.recordLog) : null,
       next.equipmentReminderSent ? 1 : 0,
-      id
+      id,
+      teamId
     );
 }
 
-export function deleteEvent(id: number) {
+export function deleteEvent(teamId: number, id: number) {
   const db = getDb();
-  db.prepare("DELETE FROM events WHERE id=?").run(id);
-  db.prepare("DELETE FROM votes WHERE event_id=?").run(id);
-  db.prepare("DELETE FROM records WHERE event_id=?").run(id);
-  db.prepare("DELETE FROM mvp_votes WHERE event_id=?").run(id);
+  db.prepare("DELETE FROM events WHERE id=? AND team_id=?").run(id, teamId);
+  db.prepare("DELETE FROM votes WHERE event_id=? AND team_id=?").run(id, teamId);
+  db.prepare("DELETE FROM records WHERE event_id=? AND team_id=?").run(id, teamId);
+  db.prepare("DELETE FROM mvp_votes WHERE event_id=? AND team_id=?").run(id, teamId);
 }
 
 // ---------- votes ----------
-export function getVotes(eventId: number): VoteRow[] {
+export function getVotes(teamId: number, eventId: number): VoteRow[] {
   const rows = getDb()
-    .prepare("SELECT event_id, member_id, status FROM votes WHERE event_id=?")
-    .all(eventId) as { event_id: number; member_id: number; status: VoteStatus }[];
+    .prepare("SELECT event_id, member_id, status FROM votes WHERE event_id=? AND team_id=?")
+    .all(eventId, teamId) as { event_id: number; member_id: number; status: VoteStatus }[];
   return rows.map((r) => ({
     eventId: r.event_id,
     memberId: r.member_id,
@@ -472,14 +484,14 @@ export function getVotes(eventId: number): VoteRow[] {
   }));
 }
 
-export function getVotesForEvents(eventIds: number[]): VoteRow[] {
+export function getVotesForEvents(teamId: number, eventIds: number[]): VoteRow[] {
   if (eventIds.length === 0) return [];
   const placeholders = eventIds.map(() => "?").join(",");
   const rows = getDb()
     .prepare(
-      `SELECT event_id, member_id, status FROM votes WHERE event_id IN (${placeholders})`
+      `SELECT event_id, member_id, status FROM votes WHERE team_id=? AND event_id IN (${placeholders})`
     )
-    .all(...eventIds) as { event_id: number; member_id: number; status: VoteStatus }[];
+    .all(teamId, ...eventIds) as { event_id: number; member_id: number; status: VoteStatus }[];
   return rows.map((r) => ({
     eventId: r.event_id,
     memberId: r.member_id,
@@ -487,19 +499,19 @@ export function getVotesForEvents(eventIds: number[]): VoteRow[] {
   }));
 }
 
-export function setVote(eventId: number, memberId: number, status: VoteStatus) {
+export function setVote(teamId: number, eventId: number, memberId: number, status: VoteStatus) {
   getDb()
     .prepare(
-      "INSERT INTO votes (event_id, member_id, status) VALUES (?, ?, ?) ON CONFLICT(event_id, member_id) DO UPDATE SET status=excluded.status"
+      "INSERT INTO votes (team_id, event_id, member_id, status) VALUES (?, ?, ?, ?) ON CONFLICT(event_id, member_id) DO UPDATE SET status=excluded.status"
     )
-    .run(eventId, memberId, status);
+    .run(teamId, eventId, memberId, status);
 }
 
 // ---------- records ----------
-export function getRecords(eventId: number): RecordRow[] {
+export function getRecords(teamId: number, eventId: number): RecordRow[] {
   const rows = getDb()
-    .prepare("SELECT * FROM records WHERE event_id=?")
-    .all(eventId) as {
+    .prepare("SELECT * FROM records WHERE event_id=? AND team_id=?")
+    .all(eventId, teamId) as {
     event_id: number;
     member_id: number;
     played: number;
@@ -517,24 +529,24 @@ export function getRecords(eventId: number): RecordRow[] {
   }));
 }
 
-export function saveRecords(eventId: number, records: RecordRow[]) {
+export function saveRecords(teamId: number, eventId: number, records: RecordRow[]) {
   const db = getDb();
-  const del = db.prepare("DELETE FROM records WHERE event_id=?");
+  const del = db.prepare("DELETE FROM records WHERE event_id=? AND team_id=?");
   const ins = db.prepare(
-    "INSERT INTO records (event_id, member_id, played, goals, assists, position) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO records (team_id, event_id, member_id, played, goals, assists, position) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   const tx = db.transaction(() => {
-    del.run(eventId);
+    del.run(eventId, teamId);
     for (const r of records) {
       if (!r.played && r.goals === 0 && r.assists === 0) continue;
-      ins.run(eventId, r.memberId, r.played ? 1 : 0, r.goals, r.assists, r.position);
+      ins.run(teamId, eventId, r.memberId, r.played ? 1 : 0, r.goals, r.assists, r.position);
     }
   });
   tx();
 }
 
-export function getAllRecords(): RecordRow[] {
-  const rows = getDb().prepare("SELECT * FROM records").all() as {
+export function getAllRecords(teamId: number): RecordRow[] {
+  const rows = getDb().prepare("SELECT * FROM records WHERE team_id=?").all(teamId) as {
     event_id: number;
     member_id: number;
     played: number;
@@ -559,29 +571,32 @@ function toMvpVote(r: MvpVoteDbRow): MvpVoteRow {
   return { eventId: r.event_id, voterId: r.voter_id, voteeId: r.votee_id };
 }
 
-export function getMvpVotes(eventId: number): MvpVoteRow[] {
+export function getMvpVotes(teamId: number, eventId: number): MvpVoteRow[] {
   const rows = getDb()
-    .prepare("SELECT * FROM mvp_votes WHERE event_id=?")
-    .all(eventId) as MvpVoteDbRow[];
+    .prepare("SELECT * FROM mvp_votes WHERE event_id=? AND team_id=?")
+    .all(eventId, teamId) as MvpVoteDbRow[];
   return rows.map(toMvpVote);
 }
 
-export function setMvpVote(eventId: number, voterId: number, voteeId: number) {
+export function setMvpVote(teamId: number, eventId: number, voterId: number, voteeId: number) {
   getDb()
     .prepare(
-      "INSERT INTO mvp_votes (event_id, voter_id, votee_id) VALUES (?, ?, ?) ON CONFLICT(event_id, voter_id) DO UPDATE SET votee_id=excluded.votee_id"
+      "INSERT INTO mvp_votes (team_id, event_id, voter_id, votee_id) VALUES (?, ?, ?, ?) ON CONFLICT(event_id, voter_id) DO UPDATE SET votee_id=excluded.votee_id"
     )
-    .run(eventId, voterId, voteeId);
+    .run(teamId, eventId, voterId, voteeId);
 }
 
-export function getAllMvpVotes(): MvpVoteRow[] {
-  const rows = getDb().prepare("SELECT * FROM mvp_votes").all() as MvpVoteDbRow[];
+export function getAllMvpVotes(teamId: number): MvpVoteRow[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM mvp_votes WHERE team_id=?")
+    .all(teamId) as MvpVoteDbRow[];
   return rows.map(toMvpVote);
 }
 
 // ---------- users ----------
 type UserDbRow = {
   id: number;
+  team_id: number;
   username: string;
   password_hash: string;
   display_name: string;
@@ -598,6 +613,7 @@ type UserDbRow = {
 function toUser(r: UserDbRow): AppUser {
   return {
     id: r.id,
+    teamId: r.team_id,
     username: r.username,
     displayName: r.display_name,
     role: r.role,
@@ -611,68 +627,68 @@ function toUser(r: UserDbRow): AppUser {
   };
 }
 
-export function countUsers(): number {
-  const row = getDb().prepare("SELECT COUNT(*) AS c FROM users").get() as {
-    c: number;
-  };
-  return row.c;
-}
-
-export function countUsersByDisplayName(displayName: string): number {
+export function countUsers(teamId: number): number {
   const row = getDb()
-    .prepare("SELECT COUNT(*) AS c FROM users WHERE display_name=?")
-    .get(displayName) as { c: number };
+    .prepare("SELECT COUNT(*) AS c FROM users WHERE team_id=?")
+    .get(teamId) as { c: number };
   return row.c;
 }
 
 export function getUserByUsername(
+  teamId: number,
   username: string
 ): (AppUser & { passwordHash: string }) | null {
   const r = getDb()
-    .prepare("SELECT * FROM users WHERE username=?")
-    .get(username) as UserDbRow | undefined;
+    .prepare("SELECT * FROM users WHERE team_id=? AND username=?")
+    .get(teamId, username) as UserDbRow | undefined;
   return r ? { ...toUser(r), passwordHash: r.password_hash } : null;
 }
 
-export function getUserById(id: number): AppUser | null {
-  const r = getDb().prepare("SELECT * FROM users WHERE id=?").get(id) as
-    | UserDbRow
-    | undefined;
+// id는 users.id(전역 유일 PK)라 teamId 없이도 행이 특정되지만, 세션 위조로
+// 다른 팀 사용자 id를 들이미는 걸 막기 위해 teamId도 함께 검증한다.
+export function getUserById(teamId: number, id: number): AppUser | null {
+  const r = getDb()
+    .prepare("SELECT * FROM users WHERE id=? AND team_id=?")
+    .get(id, teamId) as UserDbRow | undefined;
   return r ? toUser(r) : null;
 }
 
-export function listUsersByStatus(status: UserStatus): AppUser[] {
+export function listUsersByStatus(teamId: number, status: UserStatus): AppUser[] {
   const rows = getDb()
-    .prepare("SELECT * FROM users WHERE status=? ORDER BY created_at")
-    .all(status) as UserDbRow[];
+    .prepare("SELECT * FROM users WHERE team_id=? AND status=? ORDER BY created_at")
+    .all(teamId, status) as UserDbRow[];
   return rows.map(toUser);
 }
 
-export function getUsersByMemberId(memberId: number): AppUser[] {
+export function getUsersByMemberId(teamId: number, memberId: number): AppUser[] {
   const rows = getDb()
-    .prepare("SELECT * FROM users WHERE member_id=? ORDER BY created_at")
-    .all(memberId) as UserDbRow[];
+    .prepare("SELECT * FROM users WHERE team_id=? AND member_id=? ORDER BY created_at")
+    .all(teamId, memberId) as UserDbRow[];
   return rows.map(toUser);
 }
 
-export function createUser(u: {
-  username: string;
-  passwordHash: string;
-  displayName: string;
-  role: UserRole;
-  status: UserStatus;
-  memberId: number | null;
-  draftPos1?: PosGroup | null;
-  draftPos2?: PosGroup | null;
-  draftBackNo?: number | null;
-  draftPhone?: string | null;
-}): AppUser {
+export function createUser(
+  teamId: number,
+  u: {
+    username: string;
+    passwordHash: string;
+    displayName: string;
+    role: UserRole;
+    status: UserStatus;
+    memberId: number | null;
+    draftPos1?: PosGroup | null;
+    draftPos2?: PosGroup | null;
+    draftBackNo?: number | null;
+    draftPhone?: string | null;
+  }
+): AppUser {
   const createdAt = new Date().toISOString();
   const r = getDb()
     .prepare(
-      "INSERT INTO users (username, password_hash, display_name, role, status, member_id, created_at, draft_pos1, draft_pos2, draft_back_no, draft_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO users (team_id, username, password_hash, display_name, role, status, member_id, created_at, draft_pos1, draft_pos2, draft_back_no, draft_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
+      teamId,
       u.username,
       u.passwordHash,
       u.displayName,
@@ -685,10 +701,11 @@ export function createUser(u: {
       u.draftBackNo ?? null,
       u.draftPhone ?? null
     );
-  return getUserById(Number(r.lastInsertRowid))!;
+  return getUserById(teamId, Number(r.lastInsertRowid))!;
 }
 
 export function updateUserStatus(
+  teamId: number,
   id: number,
   status: UserStatus,
   memberId: number | null,
@@ -696,22 +713,25 @@ export function updateUserStatus(
 ) {
   if (role) {
     getDb()
-      .prepare("UPDATE users SET status=?, member_id=?, role=? WHERE id=?")
-      .run(status, memberId, role, id);
+      .prepare("UPDATE users SET status=?, member_id=?, role=? WHERE id=? AND team_id=?")
+      .run(status, memberId, role, id, teamId);
   } else {
     getDb()
-      .prepare("UPDATE users SET status=?, member_id=? WHERE id=?")
-      .run(status, memberId, id);
+      .prepare("UPDATE users SET status=?, member_id=? WHERE id=? AND team_id=?")
+      .run(status, memberId, id, teamId);
   }
 }
 
-export function updateUserPassword(id: number, passwordHash: string) {
-  getDb().prepare("UPDATE users SET password_hash=? WHERE id=?").run(passwordHash, id);
+export function updateUserPassword(teamId: number, id: number, passwordHash: string) {
+  getDb()
+    .prepare("UPDATE users SET password_hash=? WHERE id=? AND team_id=?")
+    .run(passwordHash, id, teamId);
 }
 
 // ---------- phone verification (아이디/비밀번호 찾기 SMS 인증) ----------
 type PhoneVerificationDbRow = {
   id: number;
+  team_id: number;
   phone: string;
   purpose: VerificationPurpose;
   code: string;
@@ -734,18 +754,16 @@ function toPhoneVerification(r: PhoneVerificationDbRow): PhoneVerificationRow {
   };
 }
 
-export function createPhoneVerification(v: {
-  phone: string;
-  purpose: VerificationPurpose;
-  code: string;
-  expiresAt: string;
-}): PhoneVerificationRow {
+export function createPhoneVerification(
+  teamId: number,
+  v: { phone: string; purpose: VerificationPurpose; code: string; expiresAt: string }
+): PhoneVerificationRow {
   const createdAt = new Date().toISOString();
   const r = getDb()
     .prepare(
-      "INSERT INTO phone_verifications (phone, purpose, code, expires_at, created_at) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO phone_verifications (team_id, phone, purpose, code, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(v.phone, v.purpose, v.code, v.expiresAt, createdAt);
+    .run(teamId, v.phone, v.purpose, v.code, v.expiresAt, createdAt);
   const row = getDb()
     .prepare("SELECT * FROM phone_verifications WHERE id=?")
     .get(Number(r.lastInsertRowid)) as PhoneVerificationDbRow;
@@ -753,14 +771,15 @@ export function createPhoneVerification(v: {
 }
 
 export function getLatestPhoneVerification(
+  teamId: number,
   phone: string,
   purpose: VerificationPurpose
 ): PhoneVerificationRow | null {
   const row = getDb()
     .prepare(
-      "SELECT * FROM phone_verifications WHERE phone=? AND purpose=? ORDER BY id DESC LIMIT 1"
+      "SELECT * FROM phone_verifications WHERE team_id=? AND phone=? AND purpose=? ORDER BY id DESC LIMIT 1"
     )
-    .get(phone, purpose) as PhoneVerificationDbRow | undefined;
+    .get(teamId, phone, purpose) as PhoneVerificationDbRow | undefined;
   return row ? toPhoneVerification(row) : null;
 }
 
@@ -777,6 +796,7 @@ export function consumePhoneVerification(id: number) {
 // ---------- tactics jobs (전술 시뮬레이터 생성 작업) ----------
 type TacticsJobDbRow = {
   id: number;
+  team_id: number;
   user_id: number;
   description: string;
   status: TacticsJobStatus;
@@ -801,7 +821,15 @@ function toTacticsJob(r: TacticsJobDbRow): TacticsJobRow {
   };
 }
 
+export function listTacticsJobs(teamId: number): TacticsJobRow[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM tactics_jobs WHERE team_id=? ORDER BY created_at DESC")
+    .all(teamId) as TacticsJobDbRow[];
+  return rows.map(toTacticsJob);
+}
+
 export function createTacticsJob(
+  teamId: number,
   userId: number,
   description: string,
   model: string
@@ -814,25 +842,29 @@ export function createTacticsJob(
   const createdAt = new Date().toISOString();
   const r = db
     .prepare(
-      "INSERT INTO tactics_jobs (user_id, description, status, model, created_at) VALUES (?, ?, 'pending', ?, ?)"
+      "INSERT INTO tactics_jobs (team_id, user_id, description, status, model, created_at) VALUES (?, ?, ?, 'pending', ?, ?)"
     )
-    .run(userId, description, model, createdAt);
+    .run(teamId, userId, description, model, createdAt);
   const row = db
     .prepare("SELECT * FROM tactics_jobs WHERE id=?")
     .get(Number(r.lastInsertRowid)) as TacticsJobDbRow;
   return toTacticsJob(row);
 }
 
-export function getTacticsJob(id: number): TacticsJobRow | null {
+export function getTacticsJob(teamId: number, id: number): TacticsJobRow | null {
   const row = getDb()
-    .prepare("SELECT * FROM tactics_jobs WHERE id=?")
-    .get(id) as TacticsJobDbRow | undefined;
+    .prepare("SELECT * FROM tactics_jobs WHERE id=? AND team_id=?")
+    .get(id, teamId) as TacticsJobDbRow | undefined;
   return row ? toTacticsJob(row) : null;
 }
 
 // pending 상태일 때만 갱신한다 — 사용자가 취소한 작업이 뒤늦게 끝나서
 // 결과를 덮어써버리는 걸 막는다.
-export function completeTacticsJob(id: number, result: TacticsScene, rawResponse: string | null) {
+export function completeTacticsJob(
+  id: number,
+  result: TacticsScene,
+  rawResponse: string | null
+) {
   getDb()
     .prepare(
       "UPDATE tactics_jobs SET status='done', result=?, raw_response=? WHERE id=? AND status='pending'"
@@ -854,9 +886,14 @@ export function cancelTacticsJob(id: number) {
     .run(id);
 }
 
+export function deleteTacticsJob(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM tactics_jobs WHERE id=? AND team_id=?").run(id, teamId);
+}
+
 // ---------- comments ----------
 type CommentDbRow = {
   id: number;
+  team_id: number;
   event_id: number;
   member_id: number;
   body: string;
@@ -873,20 +910,25 @@ function toComment(r: CommentDbRow): CommentRow {
   };
 }
 
-export function getComments(eventId: number): CommentRow[] {
+export function getComments(teamId: number, eventId: number): CommentRow[] {
   const rows = getDb()
-    .prepare("SELECT * FROM comments WHERE event_id=? ORDER BY created_at")
-    .all(eventId) as CommentDbRow[];
+    .prepare("SELECT * FROM comments WHERE event_id=? AND team_id=? ORDER BY created_at")
+    .all(eventId, teamId) as CommentDbRow[];
   return rows.map(toComment);
 }
 
-export function addComment(eventId: number, memberId: number, body: string): CommentRow {
+export function addComment(
+  teamId: number,
+  eventId: number,
+  memberId: number,
+  body: string
+): CommentRow {
   const createdAt = new Date().toISOString();
   const r = getDb()
     .prepare(
-      "INSERT INTO comments (event_id, member_id, body, created_at) VALUES (?, ?, ?, ?)"
+      "INSERT INTO comments (team_id, event_id, member_id, body, created_at) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(eventId, memberId, body, createdAt);
+    .run(teamId, eventId, memberId, body, createdAt);
   return {
     id: Number(r.lastInsertRowid),
     eventId,
@@ -896,19 +938,20 @@ export function addComment(eventId: number, memberId: number, body: string): Com
   };
 }
 
-export function getComment(id: number): CommentRow | null {
-  const r = getDb().prepare("SELECT * FROM comments WHERE id=?").get(id) as
-    | CommentDbRow
-    | undefined;
+export function getComment(teamId: number, id: number): CommentRow | null {
+  const r = getDb()
+    .prepare("SELECT * FROM comments WHERE id=? AND team_id=?")
+    .get(id, teamId) as CommentDbRow | undefined;
   return r ? toComment(r) : null;
 }
 
-export function deleteComment(id: number) {
-  getDb().prepare("DELETE FROM comments WHERE id=?").run(id);
+export function deleteComment(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM comments WHERE id=? AND team_id=?").run(id, teamId);
 }
 
 // ---------- historical stats (앱 도입 이전 누적 기록) ----------
 type HistoricalDbRow = {
+  team_id: number;
   member_id: number;
   games: number;
   goals: number;
@@ -928,22 +971,25 @@ function toHistorical(r: HistoricalDbRow): HistoricalStats {
   };
 }
 
-export function getAllHistoricalStats(): HistoricalStats[] {
-  const rows = getDb().prepare("SELECT * FROM historical_stats").all() as HistoricalDbRow[];
+export function getAllHistoricalStats(teamId: number): HistoricalStats[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM historical_stats WHERE team_id=?")
+    .all(teamId) as HistoricalDbRow[];
   return rows.map(toHistorical);
 }
 
-export function upsertHistoricalStats(stats: HistoricalStats) {
+export function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
   getDb()
     .prepare(
-      `INSERT INTO historical_stats (member_id, games, goals, assists, clean_pts, bonus_pts)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO historical_stats (team_id, member_id, games, goals, assists, clean_pts, bonus_pts)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
          games=excluded.games, goals=excluded.goals,
          assists=excluded.assists, clean_pts=excluded.clean_pts,
          bonus_pts=excluded.bonus_pts`
     )
     .run(
+      teamId,
       stats.memberId,
       stats.games,
       stats.goals,
@@ -953,13 +999,16 @@ export function upsertHistoricalStats(stats: HistoricalStats) {
     );
 }
 
-export function deleteHistoricalStats(memberId: number) {
-  getDb().prepare("DELETE FROM historical_stats WHERE member_id=?").run(memberId);
+export function deleteHistoricalStats(teamId: number, memberId: number) {
+  getDb()
+    .prepare("DELETE FROM historical_stats WHERE member_id=? AND team_id=?")
+    .run(memberId, teamId);
 }
 
 // ---------- announcements ----------
 type AnnouncementDbRow = {
   id: number;
+  team_id: number;
   title: string;
   body: string;
   author_name: string;
@@ -982,56 +1031,59 @@ function toAnnouncement(r: AnnouncementDbRow): AnnouncementRow {
   };
 }
 
-export function listAnnouncements(): AnnouncementRow[] {
+export function listAnnouncements(teamId: number): AnnouncementRow[] {
   const rows = getDb()
-    .prepare("SELECT * FROM announcements ORDER BY created_at DESC")
-    .all() as AnnouncementDbRow[];
+    .prepare("SELECT * FROM announcements WHERE team_id=? ORDER BY created_at DESC")
+    .all(teamId) as AnnouncementDbRow[];
   return rows.map(toAnnouncement);
 }
 
-export function getAnnouncement(id: number): AnnouncementRow | null {
-  const r = getDb().prepare("SELECT * FROM announcements WHERE id=?").get(id) as
-    | AnnouncementDbRow
-    | undefined;
+export function getAnnouncement(teamId: number, id: number): AnnouncementRow | null {
+  const r = getDb()
+    .prepare("SELECT * FROM announcements WHERE id=? AND team_id=?")
+    .get(id, teamId) as AnnouncementDbRow | undefined;
   return r ? toAnnouncement(r) : null;
 }
 
 export function createAnnouncement(
+  teamId: number,
   a: Omit<AnnouncementRow, "id" | "createdAt" | "updatedAt">
 ): AnnouncementRow {
   const now = new Date().toISOString();
   const r = getDb()
     .prepare(
-      "INSERT INTO announcements (title, body, author_name, category, feedback_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO announcements (team_id, title, body, author_name, category, feedback_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(a.title, a.body, a.authorName, a.category, a.feedbackDate, now, now);
-  return getAnnouncement(Number(r.lastInsertRowid))!;
+    .run(teamId, a.title, a.body, a.authorName, a.category, a.feedbackDate, now, now);
+  return getAnnouncement(teamId, Number(r.lastInsertRowid))!;
 }
 
 export function updateAnnouncement(
+  teamId: number,
   id: number,
   patch: { title: string; body: string; feedbackDate?: string | null }
 ) {
   if (patch.feedbackDate !== undefined) {
     getDb()
       .prepare(
-        "UPDATE announcements SET title=?, body=?, feedback_date=?, updated_at=? WHERE id=?"
+        "UPDATE announcements SET title=?, body=?, feedback_date=?, updated_at=? WHERE id=? AND team_id=?"
       )
-      .run(patch.title, patch.body, patch.feedbackDate, new Date().toISOString(), id);
+      .run(patch.title, patch.body, patch.feedbackDate, new Date().toISOString(), id, teamId);
     return;
   }
   getDb()
-    .prepare("UPDATE announcements SET title=?, body=?, updated_at=? WHERE id=?")
-    .run(patch.title, patch.body, new Date().toISOString(), id);
+    .prepare("UPDATE announcements SET title=?, body=?, updated_at=? WHERE id=? AND team_id=?")
+    .run(patch.title, patch.body, new Date().toISOString(), id, teamId);
 }
 
-export function deleteAnnouncement(id: number) {
-  getDb().prepare("DELETE FROM announcements WHERE id=?").run(id);
+export function deleteAnnouncement(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM announcements WHERE id=? AND team_id=?").run(id, teamId);
 }
 
 // ---------- 명예의 전당 ----------
 type HallOfFameDbRow = {
   id: number;
+  team_id: number;
   year: number;
   captain_id: number | null;
   vice_captain_id: number | null;
@@ -1056,27 +1108,29 @@ function toHallOfFame(r: HallOfFameDbRow): HallOfFameRow {
   };
 }
 
-export function listHallOfFame(): HallOfFameRow[] {
+export function listHallOfFame(teamId: number): HallOfFameRow[] {
   const rows = getDb()
-    .prepare("SELECT * FROM hall_of_fame ORDER BY year DESC")
-    .all() as HallOfFameDbRow[];
+    .prepare("SELECT * FROM hall_of_fame WHERE team_id=? ORDER BY year DESC")
+    .all(teamId) as HallOfFameDbRow[];
   return rows.map(toHallOfFame);
 }
 
 export function upsertHallOfFame(
+  teamId: number,
   entry: Omit<HallOfFameRow, "id">
 ): HallOfFameRow {
   getDb()
     .prepare(
-      `INSERT INTO hall_of_fame (year, captain_id, vice_captain_id, manager_id, top_scorer_id, top_assist_id, clean_sheet_first_id, overall_first_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(year) DO UPDATE SET
+      `INSERT INTO hall_of_fame (team_id, year, captain_id, vice_captain_id, manager_id, top_scorer_id, top_assist_id, clean_sheet_first_id, overall_first_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(team_id, year) DO UPDATE SET
          captain_id=excluded.captain_id, vice_captain_id=excluded.vice_captain_id,
          manager_id=excluded.manager_id, top_scorer_id=excluded.top_scorer_id,
          top_assist_id=excluded.top_assist_id, clean_sheet_first_id=excluded.clean_sheet_first_id,
          overall_first_id=excluded.overall_first_id`
     )
     .run(
+      teamId,
       entry.year,
       entry.captainId,
       entry.viceCaptainId,
@@ -1087,40 +1141,38 @@ export function upsertHallOfFame(
       entry.overallFirstId
     );
   const r = getDb()
-    .prepare("SELECT * FROM hall_of_fame WHERE year=?")
-    .get(entry.year) as HallOfFameDbRow;
+    .prepare("SELECT * FROM hall_of_fame WHERE team_id=? AND year=?")
+    .get(teamId, entry.year) as HallOfFameDbRow;
   return toHallOfFame(r);
 }
 
-export function deleteHallOfFame(id: number) {
-  getDb().prepare("DELETE FROM hall_of_fame WHERE id=?").run(id);
+export function deleteHallOfFame(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM hall_of_fame WHERE id=? AND team_id=?").run(id, teamId);
 }
 
 // ---------- 웹 푸시 구독 ----------
-export function savePushSubscription(sub: {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  memberId: number | null;
-}) {
+export function savePushSubscription(
+  teamId: number,
+  sub: { endpoint: string; p256dh: string; auth: string; memberId: number | null }
+) {
   getDb()
     .prepare(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, member_id, created_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO push_subscriptions (team_id, endpoint, p256dh, auth, member_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, member_id=excluded.member_id`
     )
-    .run(sub.endpoint, sub.p256dh, sub.auth, sub.memberId, new Date().toISOString());
+    .run(teamId, sub.endpoint, sub.p256dh, sub.auth, sub.memberId, new Date().toISOString());
 }
 
-export function getAllPushSubscriptions(): {
+export function getAllPushSubscriptions(teamId: number): {
   endpoint: string;
   p256dh: string;
   auth: string;
   memberId: number | null;
 }[] {
   const rows = getDb()
-    .prepare("SELECT endpoint, p256dh, auth, member_id FROM push_subscriptions")
-    .all() as { endpoint: string; p256dh: string; auth: string; member_id: number | null }[];
+    .prepare("SELECT endpoint, p256dh, auth, member_id FROM push_subscriptions WHERE team_id=?")
+    .all(teamId) as { endpoint: string; p256dh: string; auth: string; member_id: number | null }[];
   return rows.map((r) => ({
     endpoint: r.endpoint,
     p256dh: r.p256dh,
@@ -1136,6 +1188,7 @@ export function deletePushSubscription(endpoint: string) {
 // ---------- 이벤트 투표(폴) ----------
 type PollDbRow = {
   id: number;
+  team_id: number;
   title: string;
   created_by: number;
   created_at: string;
@@ -1154,34 +1207,41 @@ function toPoll(r: PollDbRow): Poll {
   };
 }
 
-type PollOptionDbRow = { id: number; poll_id: number; label: string; order_idx: number };
+type PollOptionDbRow = {
+  id: number;
+  team_id: number;
+  poll_id: number;
+  label: string;
+  order_idx: number;
+};
 
 function toPollOption(r: PollOptionDbRow): PollOption {
   return { id: r.id, pollId: r.poll_id, label: r.label, order: r.order_idx };
 }
 
-export function listPolls(): Poll[] {
+export function listPolls(teamId: number): Poll[] {
   const rows = getDb()
-    .prepare("SELECT * FROM polls ORDER BY created_at DESC")
-    .all() as PollDbRow[];
+    .prepare("SELECT * FROM polls WHERE team_id=? ORDER BY created_at DESC")
+    .all(teamId) as PollDbRow[];
   return rows.map(toPoll);
 }
 
-export function getPoll(id: number): Poll | null {
-  const row = getDb().prepare("SELECT * FROM polls WHERE id=?").get(id) as
-    | PollDbRow
-    | undefined;
+export function getPoll(teamId: number, id: number): Poll | null {
+  const row = getDb()
+    .prepare("SELECT * FROM polls WHERE id=? AND team_id=?")
+    .get(id, teamId) as PollDbRow | undefined;
   return row ? toPoll(row) : null;
 }
 
-export function getAllPollOptions(): PollOption[] {
+export function getAllPollOptions(teamId: number): PollOption[] {
   const rows = getDb()
-    .prepare("SELECT * FROM poll_options ORDER BY poll_id, order_idx")
-    .all() as PollOptionDbRow[];
+    .prepare("SELECT * FROM poll_options WHERE team_id=? ORDER BY poll_id, order_idx")
+    .all(teamId) as PollOptionDbRow[];
   return rows.map(toPollOption);
 }
 
 export function createPoll(
+  teamId: number,
   title: string,
   options: string[],
   createdBy: number,
@@ -1190,47 +1250,51 @@ export function createPoll(
   const createdAt = new Date().toISOString();
   const db = getDb();
   const insertPoll = db.prepare(
-    "INSERT INTO polls (title, created_by, created_at, closed, multi_select) VALUES (?, ?, ?, 0, ?)"
+    "INSERT INTO polls (team_id, title, created_by, created_at, closed, multi_select) VALUES (?, ?, ?, ?, 0, ?)"
   );
   const insertOption = db.prepare(
-    "INSERT INTO poll_options (poll_id, label, order_idx) VALUES (?, ?, ?)"
+    "INSERT INTO poll_options (team_id, poll_id, label, order_idx) VALUES (?, ?, ?, ?)"
   );
   const pollId = db.transaction(() => {
-    const info = insertPoll.run(title, createdBy, createdAt, multiSelect ? 1 : 0);
+    const info = insertPoll.run(teamId, title, createdBy, createdAt, multiSelect ? 1 : 0);
     const id = Number(info.lastInsertRowid);
-    options.forEach((label, i) => insertOption.run(id, label, i));
+    options.forEach((label, i) => insertOption.run(teamId, id, label, i));
     return id;
   })();
   return { id: pollId, title, createdBy, createdAt, closed: false, multiSelect };
 }
 
-export function setPollClosed(id: number, closed: boolean) {
-  getDb().prepare("UPDATE polls SET closed=? WHERE id=?").run(closed ? 1 : 0, id);
+export function setPollClosed(teamId: number, id: number, closed: boolean) {
+  getDb()
+    .prepare("UPDATE polls SET closed=? WHERE id=? AND team_id=?")
+    .run(closed ? 1 : 0, id, teamId);
 }
 
-export function addPollOption(pollId: number, label: string): PollOption {
+export function addPollOption(teamId: number, pollId: number, label: string): PollOption {
   const db = getDb();
   const { m } = db
-    .prepare("SELECT COALESCE(MAX(order_idx), -1) AS m FROM poll_options WHERE poll_id=?")
-    .get(pollId) as { m: number };
+    .prepare(
+      "SELECT COALESCE(MAX(order_idx), -1) AS m FROM poll_options WHERE poll_id=? AND team_id=?"
+    )
+    .get(pollId, teamId) as { m: number };
   const order = m + 1;
   const info = db
-    .prepare("INSERT INTO poll_options (poll_id, label, order_idx) VALUES (?, ?, ?)")
-    .run(pollId, label, order);
+    .prepare("INSERT INTO poll_options (team_id, poll_id, label, order_idx) VALUES (?, ?, ?, ?)")
+    .run(teamId, pollId, label, order);
   return { id: Number(info.lastInsertRowid), pollId, label, order };
 }
 
-export function deletePoll(id: number) {
+export function deletePoll(teamId: number, id: number) {
   const db = getDb();
   db.transaction(() => {
-    db.prepare("DELETE FROM poll_votes WHERE poll_id=?").run(id);
-    db.prepare("DELETE FROM poll_options WHERE poll_id=?").run(id);
-    db.prepare("DELETE FROM polls WHERE id=?").run(id);
+    db.prepare("DELETE FROM poll_votes WHERE poll_id=? AND team_id=?").run(id, teamId);
+    db.prepare("DELETE FROM poll_options WHERE poll_id=? AND team_id=?").run(id, teamId);
+    db.prepare("DELETE FROM polls WHERE id=? AND team_id=?").run(id, teamId);
   })();
 }
 
-export function getAllPollVotes(): PollVoteRow[] {
-  const rows = getDb().prepare("SELECT * FROM poll_votes").all() as {
+export function getAllPollVotes(teamId: number): PollVoteRow[] {
+  const rows = getDb().prepare("SELECT * FROM poll_votes WHERE team_id=?").all(teamId) as {
     poll_id: number;
     member_id: number;
     option_id: number;
@@ -1242,16 +1306,22 @@ export function getAllPollVotes(): PollVoteRow[] {
   }));
 }
 
-export function setPollVote(pollId: number, memberId: number, optionIds: number[]) {
+export function setPollVote(
+  teamId: number,
+  pollId: number,
+  memberId: number,
+  optionIds: number[]
+) {
   const db = getDb();
   db.transaction(() => {
-    db.prepare("DELETE FROM poll_votes WHERE poll_id=? AND member_id=?").run(
+    db.prepare("DELETE FROM poll_votes WHERE poll_id=? AND member_id=? AND team_id=?").run(
       pollId,
-      memberId
+      memberId,
+      teamId
     );
     const insert = db.prepare(
-      "INSERT INTO poll_votes (poll_id, member_id, option_id) VALUES (?, ?, ?)"
+      "INSERT INTO poll_votes (team_id, poll_id, member_id, option_id) VALUES (?, ?, ?, ?)"
     );
-    for (const optionId of optionIds) insert.run(pollId, memberId, optionId);
+    for (const optionId of optionIds) insert.run(teamId, pollId, memberId, optionId);
   })();
 }

@@ -1,27 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 export default function FindIdPage() {
   const [step, setStep] = useState<"phone" | "code" | "result">("phone");
+  const [teamSlug, setTeamSlug] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [usernames, setUsernames] = useState<string[]>([]);
 
+  useEffect(() => {
+    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
+  }, []);
+
   const input =
     "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
 
   const requestCode = async () => {
-    if (!phone.trim()) return;
+    if (!teamSlug.trim() || !phone.trim()) return;
     setLoading(true);
     setError("");
     const res = await fetch("/api/auth/find-id/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: phone.trim() }),
+      body: JSON.stringify({ teamSlug: teamSlug.trim(), phone: phone.trim() }),
     });
     const data = await res.json();
     setLoading(false);
@@ -39,7 +45,7 @@ export default function FindIdPage() {
     const res = await fetch("/api/auth/find-id/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: phone.trim(), code: code.trim() }),
+      body: JSON.stringify({ teamSlug: teamSlug.trim(), phone: phone.trim(), code: code.trim() }),
     });
     const data = await res.json();
     setLoading(false);
@@ -74,6 +80,15 @@ export default function FindIdPage() {
       <h1 className="text-center text-lg font-bold">아이디 찾기</h1>
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
         <div>
+          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
+          <input
+            className={input}
+            value={teamSlug}
+            onChange={(e) => setTeamSlug(e.target.value)}
+            disabled={step === "code"}
+          />
+        </div>
+        <div>
           <label className="text-xs font-semibold text-zinc-500">휴대폰 번호</label>
           <input
             className={input}
@@ -87,7 +102,7 @@ export default function FindIdPage() {
         {step === "phone" && (
           <button
             onClick={requestCode}
-            disabled={loading || !phone.trim()}
+            disabled={loading || !teamSlug.trim() || !phone.trim()}
             className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
           >
             {loading ? "발송 중…" : "인증번호 받기"}

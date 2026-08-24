@@ -7,7 +7,9 @@ export async function POST(
 ) {
   const { id } = await params;
   const pollId = Number(id);
-  const poll = await getPoll(pollId);
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  const poll = await getPoll(session.teamId, pollId);
   if (!poll) return Response.json({ error: "not found" }, { status: 404 });
   if (poll.closed) {
     return Response.json(
@@ -16,9 +18,8 @@ export async function POST(
     );
   }
 
-  const session = await getSessionUser();
-  const isOwner = session?.memberId === poll.createdBy;
-  if (!session || (!isOwner && session.role !== "admin")) {
+  const isOwner = session.memberId === poll.createdBy;
+  if (!isOwner && session.role !== "admin") {
     return Response.json(
       { error: "투표를 만든 사람이나 운영진만 보기를 추가할 수 있어요." },
       { status: 403 }
@@ -31,6 +32,6 @@ export async function POST(
     return Response.json({ error: "보기 내용을 입력해 주세요." }, { status: 400 });
   }
 
-  const option = await addPollOption(pollId, label);
+  const option = await addPollOption(session.teamId, pollId, label);
   return Response.json(option, { status: 201 });
 }

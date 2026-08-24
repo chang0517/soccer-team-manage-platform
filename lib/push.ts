@@ -43,12 +43,11 @@ async function sendTo(subs: PushSub[], payload: { title: string; body: string; u
  * 생성 API)를 막지 않도록 에러는 여기서 삼킨다. 구독이 만료됐으면(410/404)
  * DB에서 정리한다.
  */
-export async function sendPushToAll(payload: {
-  title: string;
-  body: string;
-  url: string;
-}) {
-  const subs = await getAllPushSubscriptions();
+export async function sendPushToAll(
+  teamId: number,
+  payload: { title: string; body: string; url: string }
+) {
+  const subs = await getAllPushSubscriptions(teamId);
   await sendTo(subs, payload);
 }
 
@@ -57,9 +56,10 @@ export async function sendPushToAll(payload: {
  * 여러 기기로 구독해뒀으면 전부에게 간다.
  */
 export async function sendPushToMember(
+  teamId: number,
   memberId: number,
   payload: { title: string; body: string; url: string }
 ) {
-  const subs = (await getAllPushSubscriptions()).filter((s) => s.memberId === memberId);
+  const subs = (await getAllPushSubscriptions(teamId)).filter((s) => s.memberId === memberId);
   await sendTo(subs, payload);
 }

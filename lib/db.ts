@@ -17,6 +17,7 @@ import type {
   RecordRow,
   TacticsJobRow,
   TacticsScene,
+  TeamRow,
   UserRole,
   UserStatus,
   VerificationPurpose,
@@ -27,149 +28,191 @@ import type {
 // DATABASE_URL이 있으면 Postgres(Supabase), 없으면 로컬 SQLite를 쓴다.
 const usePg = !!process.env.DATABASE_URL;
 
-export async function listMembers(): Promise<Member[]> {
-  return usePg ? pg.listMembers() : sqlite.listMembers();
+// ---------- teams ----------
+export async function getTeamBySlug(slug: string): Promise<TeamRow | null> {
+  return usePg ? pg.getTeamBySlug(slug) : sqlite.getTeamBySlug(slug);
 }
-export async function createMember(m: Omit<Member, "id">): Promise<Member> {
-  return usePg ? pg.createMember(m) : sqlite.createMember(m);
+export async function getTeamById(id: number): Promise<TeamRow | null> {
+  return usePg ? pg.getTeamById(id) : sqlite.getTeamById(id);
 }
-export async function updateMember(id: number, m: Omit<Member, "id">) {
-  return usePg ? pg.updateMember(id, m) : sqlite.updateMember(id, m);
+export async function createTeam(t: { slug: string; name: string }): Promise<TeamRow> {
+  return usePg ? pg.createTeam(t) : sqlite.createTeam(t);
 }
-export async function deleteMember(id: number) {
-  return usePg ? pg.deleteMember(id) : sqlite.deleteMember(id);
+export async function listTeams(): Promise<TeamRow[]> {
+  return usePg ? pg.listTeams() : sqlite.listTeams();
+}
+export async function updateTeamFineSettings(
+  teamId: number,
+  patch: { fineAccount?: string; fineAmount?: string }
+) {
+  return usePg
+    ? pg.updateTeamFineSettings(teamId, patch)
+    : sqlite.updateTeamFineSettings(teamId, patch);
 }
 
-export async function listEvents(): Promise<EventItem[]> {
-  return usePg ? pg.listEvents() : sqlite.listEvents();
+export async function listMembers(teamId: number): Promise<Member[]> {
+  return usePg ? pg.listMembers(teamId) : sqlite.listMembers(teamId);
 }
-export async function getEvent(id: number): Promise<EventItem | null> {
-  return usePg ? pg.getEvent(id) : sqlite.getEvent(id);
+export async function getMember(teamId: number, id: number): Promise<Member | null> {
+  return usePg ? pg.getMember(teamId, id) : sqlite.getMember(teamId, id);
+}
+export async function createMember(teamId: number, m: Omit<Member, "id">): Promise<Member> {
+  return usePg ? pg.createMember(teamId, m) : sqlite.createMember(teamId, m);
+}
+export async function updateMember(teamId: number, id: number, m: Omit<Member, "id">) {
+  return usePg ? pg.updateMember(teamId, id, m) : sqlite.updateMember(teamId, id, m);
+}
+export async function deleteMember(teamId: number, id: number) {
+  return usePg ? pg.deleteMember(teamId, id) : sqlite.deleteMember(teamId, id);
+}
+
+export async function listEvents(teamId: number): Promise<EventItem[]> {
+  return usePg ? pg.listEvents(teamId) : sqlite.listEvents(teamId);
+}
+export async function getEvent(teamId: number, id: number): Promise<EventItem | null> {
+  return usePg ? pg.getEvent(teamId, id) : sqlite.getEvent(teamId, id);
 }
 export async function createEvent(
+  teamId: number,
   e: Omit<
     EventItem,
     "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
   >
 ): Promise<EventItem> {
-  return usePg ? pg.createEvent(e) : sqlite.createEvent(e);
+  return usePg ? pg.createEvent(teamId, e) : sqlite.createEvent(teamId, e);
 }
-export async function updateEvent(id: number, patch: Partial<EventItem>) {
-  return usePg ? pg.updateEvent(id, patch) : sqlite.updateEvent(id, patch);
+export async function updateEvent(teamId: number, id: number, patch: Partial<EventItem>) {
+  return usePg ? pg.updateEvent(teamId, id, patch) : sqlite.updateEvent(teamId, id, patch);
 }
-export async function deleteEvent(id: number) {
-  return usePg ? pg.deleteEvent(id) : sqlite.deleteEvent(id);
+export async function deleteEvent(teamId: number, id: number) {
+  return usePg ? pg.deleteEvent(teamId, id) : sqlite.deleteEvent(teamId, id);
 }
 
-export async function getVotes(eventId: number): Promise<VoteRow[]> {
-  return usePg ? pg.getVotes(eventId) : sqlite.getVotes(eventId);
+export async function getVotes(teamId: number, eventId: number): Promise<VoteRow[]> {
+  return usePg ? pg.getVotes(teamId, eventId) : sqlite.getVotes(teamId, eventId);
 }
-export async function getVotesForEvents(eventIds: number[]): Promise<VoteRow[]> {
+export async function getVotesForEvents(teamId: number, eventIds: number[]): Promise<VoteRow[]> {
   return usePg
-    ? pg.getVotesForEvents(eventIds)
-    : sqlite.getVotesForEvents(eventIds);
+    ? pg.getVotesForEvents(teamId, eventIds)
+    : sqlite.getVotesForEvents(teamId, eventIds);
 }
 export async function setVote(
+  teamId: number,
   eventId: number,
   memberId: number,
   status: VoteStatus
 ) {
   return usePg
-    ? pg.setVote(eventId, memberId, status)
-    : sqlite.setVote(eventId, memberId, status);
+    ? pg.setVote(teamId, eventId, memberId, status)
+    : sqlite.setVote(teamId, eventId, memberId, status);
 }
 
-export async function getRecords(eventId: number): Promise<RecordRow[]> {
-  return usePg ? pg.getRecords(eventId) : sqlite.getRecords(eventId);
+export async function getRecords(teamId: number, eventId: number): Promise<RecordRow[]> {
+  return usePg ? pg.getRecords(teamId, eventId) : sqlite.getRecords(teamId, eventId);
 }
-export async function saveRecords(eventId: number, records: RecordRow[]) {
+export async function saveRecords(teamId: number, eventId: number, records: RecordRow[]) {
   return usePg
-    ? pg.saveRecords(eventId, records)
-    : sqlite.saveRecords(eventId, records);
+    ? pg.saveRecords(teamId, eventId, records)
+    : sqlite.saveRecords(teamId, eventId, records);
 }
-export async function getAllRecords(): Promise<RecordRow[]> {
-  return usePg ? pg.getAllRecords() : sqlite.getAllRecords();
+export async function getAllRecords(teamId: number): Promise<RecordRow[]> {
+  return usePg ? pg.getAllRecords(teamId) : sqlite.getAllRecords(teamId);
 }
 
-export async function getMvpVotes(eventId: number): Promise<MvpVoteRow[]> {
-  return usePg ? pg.getMvpVotes(eventId) : sqlite.getMvpVotes(eventId);
+export async function getMvpVotes(teamId: number, eventId: number): Promise<MvpVoteRow[]> {
+  return usePg ? pg.getMvpVotes(teamId, eventId) : sqlite.getMvpVotes(teamId, eventId);
 }
-export async function setMvpVote(eventId: number, voterId: number, voteeId: number) {
+export async function setMvpVote(
+  teamId: number,
+  eventId: number,
+  voterId: number,
+  voteeId: number
+) {
   return usePg
-    ? pg.setMvpVote(eventId, voterId, voteeId)
-    : sqlite.setMvpVote(eventId, voterId, voteeId);
+    ? pg.setMvpVote(teamId, eventId, voterId, voteeId)
+    : sqlite.setMvpVote(teamId, eventId, voterId, voteeId);
 }
-export async function getAllMvpVotes(): Promise<MvpVoteRow[]> {
-  return usePg ? pg.getAllMvpVotes() : sqlite.getAllMvpVotes();
+export async function getAllMvpVotes(teamId: number): Promise<MvpVoteRow[]> {
+  return usePg ? pg.getAllMvpVotes(teamId) : sqlite.getAllMvpVotes(teamId);
 }
 
-export async function countUsers(): Promise<number> {
-  return usePg ? pg.countUsers() : sqlite.countUsers();
-}
-export async function countUsersByDisplayName(displayName: string): Promise<number> {
-  return usePg
-    ? pg.countUsersByDisplayName(displayName)
-    : sqlite.countUsersByDisplayName(displayName);
+export async function countUsers(teamId: number): Promise<number> {
+  return usePg ? pg.countUsers(teamId) : sqlite.countUsers(teamId);
 }
 export async function getUserByUsername(
+  teamId: number,
   username: string
 ): Promise<(AppUser & { passwordHash: string }) | null> {
-  return usePg ? pg.getUserByUsername(username) : sqlite.getUserByUsername(username);
+  return usePg
+    ? pg.getUserByUsername(teamId, username)
+    : sqlite.getUserByUsername(teamId, username);
 }
-export async function getUserById(id: number): Promise<AppUser | null> {
-  return usePg ? pg.getUserById(id) : sqlite.getUserById(id);
+export async function getUserById(teamId: number, id: number): Promise<AppUser | null> {
+  return usePg ? pg.getUserById(teamId, id) : sqlite.getUserById(teamId, id);
 }
-export async function listUsersByStatus(status: UserStatus): Promise<AppUser[]> {
-  return usePg ? pg.listUsersByStatus(status) : sqlite.listUsersByStatus(status);
+export async function listUsersByStatus(
+  teamId: number,
+  status: UserStatus
+): Promise<AppUser[]> {
+  return usePg
+    ? pg.listUsersByStatus(teamId, status)
+    : sqlite.listUsersByStatus(teamId, status);
 }
-export async function getUsersByMemberId(memberId: number): Promise<AppUser[]> {
-  return usePg ? pg.getUsersByMemberId(memberId) : sqlite.getUsersByMemberId(memberId);
+export async function getUsersByMemberId(teamId: number, memberId: number): Promise<AppUser[]> {
+  return usePg
+    ? pg.getUsersByMemberId(teamId, memberId)
+    : sqlite.getUsersByMemberId(teamId, memberId);
 }
-export async function createUser(u: {
-  username: string;
-  passwordHash: string;
-  displayName: string;
-  role: UserRole;
-  status: UserStatus;
-  memberId: number | null;
-  draftPos1?: PosGroup | null;
-  draftPos2?: PosGroup | null;
-  draftBackNo?: number | null;
-  draftPhone?: string | null;
-}): Promise<AppUser> {
-  return usePg ? pg.createUser(u) : sqlite.createUser(u);
+export async function createUser(
+  teamId: number,
+  u: {
+    username: string;
+    passwordHash: string;
+    displayName: string;
+    role: UserRole;
+    status: UserStatus;
+    memberId: number | null;
+    draftPos1?: PosGroup | null;
+    draftPos2?: PosGroup | null;
+    draftBackNo?: number | null;
+    draftPhone?: string | null;
+  }
+): Promise<AppUser> {
+  return usePg ? pg.createUser(teamId, u) : sqlite.createUser(teamId, u);
 }
 export async function updateUserStatus(
+  teamId: number,
   id: number,
   status: UserStatus,
   memberId: number | null,
   role?: UserRole
 ) {
   return usePg
-    ? pg.updateUserStatus(id, status, memberId, role)
-    : sqlite.updateUserStatus(id, status, memberId, role);
+    ? pg.updateUserStatus(teamId, id, status, memberId, role)
+    : sqlite.updateUserStatus(teamId, id, status, memberId, role);
 }
-export async function updateUserPassword(id: number, passwordHash: string) {
+export async function updateUserPassword(teamId: number, id: number, passwordHash: string) {
   return usePg
-    ? pg.updateUserPassword(id, passwordHash)
-    : sqlite.updateUserPassword(id, passwordHash);
+    ? pg.updateUserPassword(teamId, id, passwordHash)
+    : sqlite.updateUserPassword(teamId, id, passwordHash);
 }
 
-export async function createPhoneVerification(v: {
-  phone: string;
-  purpose: VerificationPurpose;
-  code: string;
-  expiresAt: string;
-}): Promise<PhoneVerificationRow> {
-  return usePg ? pg.createPhoneVerification(v) : sqlite.createPhoneVerification(v);
+export async function createPhoneVerification(
+  teamId: number,
+  v: { phone: string; purpose: VerificationPurpose; code: string; expiresAt: string }
+): Promise<PhoneVerificationRow> {
+  return usePg
+    ? pg.createPhoneVerification(teamId, v)
+    : sqlite.createPhoneVerification(teamId, v);
 }
 export async function getLatestPhoneVerification(
+  teamId: number,
   phone: string,
   purpose: VerificationPurpose
 ): Promise<PhoneVerificationRow | null> {
   return usePg
-    ? pg.getLatestPhoneVerification(phone, purpose)
-    : sqlite.getLatestPhoneVerification(phone, purpose);
+    ? pg.getLatestPhoneVerification(teamId, phone, purpose)
+    : sqlite.getLatestPhoneVerification(teamId, phone, purpose);
 }
 export async function incrementPhoneVerificationAttempts(id: number) {
   return usePg
@@ -182,17 +225,21 @@ export async function consumePhoneVerification(id: number) {
     : sqlite.consumePhoneVerification(id);
 }
 
+export async function listTacticsJobs(teamId: number): Promise<TacticsJobRow[]> {
+  return usePg ? pg.listTacticsJobs(teamId) : sqlite.listTacticsJobs(teamId);
+}
 export async function createTacticsJob(
+  teamId: number,
   userId: number,
   description: string,
   model: string
 ): Promise<TacticsJobRow> {
   return usePg
-    ? pg.createTacticsJob(userId, description, model)
-    : sqlite.createTacticsJob(userId, description, model);
+    ? pg.createTacticsJob(teamId, userId, description, model)
+    : sqlite.createTacticsJob(teamId, userId, description, model);
 }
-export async function getTacticsJob(id: number): Promise<TacticsJobRow | null> {
-  return usePg ? pg.getTacticsJob(id) : sqlite.getTacticsJob(id);
+export async function getTacticsJob(teamId: number, id: number): Promise<TacticsJobRow | null> {
+  return usePg ? pg.getTacticsJob(teamId, id) : sqlite.getTacticsJob(teamId, id);
 }
 export async function completeTacticsJob(
   id: number,
@@ -211,132 +258,147 @@ export async function failTacticsJob(id: number, error: string, rawResponse: str
 export async function cancelTacticsJob(id: number) {
   return usePg ? pg.cancelTacticsJob(id) : sqlite.cancelTacticsJob(id);
 }
+export async function deleteTacticsJob(teamId: number, id: number) {
+  return usePg ? pg.deleteTacticsJob(teamId, id) : sqlite.deleteTacticsJob(teamId, id);
+}
 
-export async function getComments(eventId: number): Promise<CommentRow[]> {
-  return usePg ? pg.getComments(eventId) : sqlite.getComments(eventId);
+export async function getComments(teamId: number, eventId: number): Promise<CommentRow[]> {
+  return usePg ? pg.getComments(teamId, eventId) : sqlite.getComments(teamId, eventId);
 }
 export async function addComment(
+  teamId: number,
   eventId: number,
   memberId: number,
   body: string
 ): Promise<CommentRow> {
   return usePg
-    ? pg.addComment(eventId, memberId, body)
-    : sqlite.addComment(eventId, memberId, body);
+    ? pg.addComment(teamId, eventId, memberId, body)
+    : sqlite.addComment(teamId, eventId, memberId, body);
 }
-export async function getComment(id: number): Promise<CommentRow | null> {
-  return usePg ? pg.getComment(id) : sqlite.getComment(id);
+export async function getComment(teamId: number, id: number): Promise<CommentRow | null> {
+  return usePg ? pg.getComment(teamId, id) : sqlite.getComment(teamId, id);
 }
-export async function deleteComment(id: number) {
-  return usePg ? pg.deleteComment(id) : sqlite.deleteComment(id);
-}
-
-export async function getAllHistoricalStats(): Promise<HistoricalStats[]> {
-  return usePg ? pg.getAllHistoricalStats() : sqlite.getAllHistoricalStats();
-}
-export async function upsertHistoricalStats(stats: HistoricalStats) {
-  return usePg
-    ? pg.upsertHistoricalStats(stats)
-    : sqlite.upsertHistoricalStats(stats);
-}
-export async function deleteHistoricalStats(memberId: number) {
-  return usePg
-    ? pg.deleteHistoricalStats(memberId)
-    : sqlite.deleteHistoricalStats(memberId);
+export async function deleteComment(teamId: number, id: number) {
+  return usePg ? pg.deleteComment(teamId, id) : sqlite.deleteComment(teamId, id);
 }
 
-export async function listAnnouncements(): Promise<AnnouncementRow[]> {
-  return usePg ? pg.listAnnouncements() : sqlite.listAnnouncements();
+export async function getAllHistoricalStats(teamId: number): Promise<HistoricalStats[]> {
+  return usePg ? pg.getAllHistoricalStats(teamId) : sqlite.getAllHistoricalStats(teamId);
 }
-export async function getAnnouncement(id: number): Promise<AnnouncementRow | null> {
-  return usePg ? pg.getAnnouncement(id) : sqlite.getAnnouncement(id);
+export async function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
+  return usePg
+    ? pg.upsertHistoricalStats(teamId, stats)
+    : sqlite.upsertHistoricalStats(teamId, stats);
+}
+export async function deleteHistoricalStats(teamId: number, memberId: number) {
+  return usePg
+    ? pg.deleteHistoricalStats(teamId, memberId)
+    : sqlite.deleteHistoricalStats(teamId, memberId);
+}
+
+export async function listAnnouncements(teamId: number): Promise<AnnouncementRow[]> {
+  return usePg ? pg.listAnnouncements(teamId) : sqlite.listAnnouncements(teamId);
+}
+export async function getAnnouncement(
+  teamId: number,
+  id: number
+): Promise<AnnouncementRow | null> {
+  return usePg ? pg.getAnnouncement(teamId, id) : sqlite.getAnnouncement(teamId, id);
 }
 export async function createAnnouncement(
+  teamId: number,
   a: Omit<AnnouncementRow, "id" | "createdAt" | "updatedAt">
 ): Promise<AnnouncementRow> {
-  return usePg ? pg.createAnnouncement(a) : sqlite.createAnnouncement(a);
+  return usePg ? pg.createAnnouncement(teamId, a) : sqlite.createAnnouncement(teamId, a);
 }
 export async function updateAnnouncement(
+  teamId: number,
   id: number,
   patch: { title: string; body: string; feedbackDate?: string | null }
 ) {
   return usePg
-    ? pg.updateAnnouncement(id, patch)
-    : sqlite.updateAnnouncement(id, patch);
+    ? pg.updateAnnouncement(teamId, id, patch)
+    : sqlite.updateAnnouncement(teamId, id, patch);
 }
-export async function deleteAnnouncement(id: number) {
-  return usePg ? pg.deleteAnnouncement(id) : sqlite.deleteAnnouncement(id);
+export async function deleteAnnouncement(teamId: number, id: number) {
+  return usePg ? pg.deleteAnnouncement(teamId, id) : sqlite.deleteAnnouncement(teamId, id);
 }
 
-export async function listHallOfFame(): Promise<HallOfFameRow[]> {
-  return usePg ? pg.listHallOfFame() : sqlite.listHallOfFame();
+export async function listHallOfFame(teamId: number): Promise<HallOfFameRow[]> {
+  return usePg ? pg.listHallOfFame(teamId) : sqlite.listHallOfFame(teamId);
 }
 export async function upsertHallOfFame(
+  teamId: number,
   entry: Omit<HallOfFameRow, "id">
 ): Promise<HallOfFameRow> {
-  return usePg ? pg.upsertHallOfFame(entry) : sqlite.upsertHallOfFame(entry);
+  return usePg ? pg.upsertHallOfFame(teamId, entry) : sqlite.upsertHallOfFame(teamId, entry);
 }
-export async function deleteHallOfFame(id: number) {
-  return usePg ? pg.deleteHallOfFame(id) : sqlite.deleteHallOfFame(id);
+export async function deleteHallOfFame(teamId: number, id: number) {
+  return usePg ? pg.deleteHallOfFame(teamId, id) : sqlite.deleteHallOfFame(teamId, id);
 }
 
-export async function savePushSubscription(sub: {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  memberId: number | null;
-}) {
-  return usePg ? pg.savePushSubscription(sub) : sqlite.savePushSubscription(sub);
+export async function savePushSubscription(
+  teamId: number,
+  sub: { endpoint: string; p256dh: string; auth: string; memberId: number | null }
+) {
+  return usePg
+    ? pg.savePushSubscription(teamId, sub)
+    : sqlite.savePushSubscription(teamId, sub);
 }
-export async function getAllPushSubscriptions() {
-  return usePg ? pg.getAllPushSubscriptions() : sqlite.getAllPushSubscriptions();
+export async function getAllPushSubscriptions(teamId: number) {
+  return usePg ? pg.getAllPushSubscriptions(teamId) : sqlite.getAllPushSubscriptions(teamId);
 }
 export async function deletePushSubscription(endpoint: string) {
   return usePg ? pg.deletePushSubscription(endpoint) : sqlite.deletePushSubscription(endpoint);
 }
 
-export async function listPolls(): Promise<Poll[]> {
-  return usePg ? pg.listPolls() : sqlite.listPolls();
+export async function listPolls(teamId: number): Promise<Poll[]> {
+  return usePg ? pg.listPolls(teamId) : sqlite.listPolls(teamId);
 }
-export async function getPoll(id: number): Promise<Poll | null> {
-  return usePg ? pg.getPoll(id) : sqlite.getPoll(id);
+export async function getPoll(teamId: number, id: number): Promise<Poll | null> {
+  return usePg ? pg.getPoll(teamId, id) : sqlite.getPoll(teamId, id);
 }
-export async function getAllPollOptions(): Promise<PollOption[]> {
-  return usePg ? pg.getAllPollOptions() : sqlite.getAllPollOptions();
+export async function getAllPollOptions(teamId: number): Promise<PollOption[]> {
+  return usePg ? pg.getAllPollOptions(teamId) : sqlite.getAllPollOptions(teamId);
 }
 export async function createPoll(
+  teamId: number,
   title: string,
   options: string[],
   createdBy: number,
   multiSelect: boolean
 ): Promise<Poll> {
   return usePg
-    ? pg.createPoll(title, options, createdBy, multiSelect)
-    : sqlite.createPoll(title, options, createdBy, multiSelect);
+    ? pg.createPoll(teamId, title, options, createdBy, multiSelect)
+    : sqlite.createPoll(teamId, title, options, createdBy, multiSelect);
 }
-export async function setPollClosed(id: number, closed: boolean) {
-  return usePg ? pg.setPollClosed(id, closed) : sqlite.setPollClosed(id, closed);
+export async function setPollClosed(teamId: number, id: number, closed: boolean) {
+  return usePg
+    ? pg.setPollClosed(teamId, id, closed)
+    : sqlite.setPollClosed(teamId, id, closed);
 }
 export async function addPollOption(
+  teamId: number,
   pollId: number,
   label: string
 ): Promise<PollOption> {
   return usePg
-    ? pg.addPollOption(pollId, label)
-    : sqlite.addPollOption(pollId, label);
+    ? pg.addPollOption(teamId, pollId, label)
+    : sqlite.addPollOption(teamId, pollId, label);
 }
-export async function deletePoll(id: number) {
-  return usePg ? pg.deletePoll(id) : sqlite.deletePoll(id);
+export async function deletePoll(teamId: number, id: number) {
+  return usePg ? pg.deletePoll(teamId, id) : sqlite.deletePoll(teamId, id);
 }
-export async function getAllPollVotes(): Promise<PollVoteRow[]> {
-  return usePg ? pg.getAllPollVotes() : sqlite.getAllPollVotes();
+export async function getAllPollVotes(teamId: number): Promise<PollVoteRow[]> {
+  return usePg ? pg.getAllPollVotes(teamId) : sqlite.getAllPollVotes(teamId);
 }
 export async function setPollVote(
+  teamId: number,
   pollId: number,
   memberId: number,
   optionIds: number[]
 ) {
   return usePg
-    ? pg.setPollVote(pollId, memberId, optionIds)
-    : sqlite.setPollVote(pollId, memberId, optionIds);
+    ? pg.setPollVote(teamId, pollId, memberId, optionIds)
+    : sqlite.setPollVote(teamId, pollId, memberId, optionIds);
 }

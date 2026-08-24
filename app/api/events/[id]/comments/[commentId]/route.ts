@@ -7,13 +7,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; commentId: string }> }
 ) {
   const { id, commentId } = await params;
-  const comment = await getComment(Number(commentId));
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  const comment = await getComment(session.teamId, Number(commentId));
   if (!comment || comment.eventId !== Number(id)) {
     return Response.json({ error: "댓글을 찾을 수 없어요." }, { status: 404 });
   }
 
-  const session = await getSessionUser();
-  const isAuthor = session?.memberId != null && session.memberId === comment.memberId;
+  const isAuthor = session.memberId != null && session.memberId === comment.memberId;
   if (!isAuthor && !(await requireAdmin())) {
     return Response.json(
       { error: "본인이 쓴 댓글이거나 운영진만 지울 수 있어요." },
@@ -21,6 +22,6 @@ export async function DELETE(
     );
   }
 
-  await deleteComment(comment.id);
+  await deleteComment(session.teamId, comment.id);
   return Response.json({ ok: true });
 }

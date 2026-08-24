@@ -1,6 +1,7 @@
 import {
   consumePhoneVerification,
   getLatestPhoneVerification,
+  getTeamBySlug,
   getUserByUsername,
   incrementPhoneVerificationAttempts,
   listMembers,
@@ -11,23 +12,28 @@ import { generateTempPassword, MAX_ATTEMPTS } from "@/lib/otp";
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const teamSlug = String(body?.teamSlug ?? "").trim();
   const username = String(body?.username ?? "").trim();
   const code = String(body?.code ?? "").trim();
   if (!username || !code) {
     return Response.json({ error: "인증번호를 입력해 주세요." }, { status: 400 });
   }
+  const team = await getTeamBySlug(teamSlug);
+  if (!team) {
+    return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
+  }
 
-  const user = await getUserByUsername(username);
+  const user = await getUserByUsername(team.id, username);
   if (!user || !user.memberId) {
     return Response.json({ error: "계정 정보를 찾을 수 없어요." }, { status: 404 });
   }
-  const members = await listMembers();
+  const members = await listMembers(team.id);
   const member = members.find((m) => m.id === user.memberId);
   if (!member?.phone) {
     return Response.json({ error: "등록된 휴대폰 번호가 없어요." }, { status: 400 });
   }
 
-  const verification = await getLatestPhoneVerification(member.phone, "reset_password");
+  const verification = await getLatestPhoneVerification(team.id, member.phone, "reset_password");
   if (!verification || verification.consumed) {
     return Response.json({ error: "인증번호를 다시 요청해 주세요." }, { status: 400 });
   }
@@ -51,7 +57,7 @@ export async function POST(request: Request) {
   await consumePhoneVerification(verification.id);
 
   const tempPassword = generateTempPassword();
-  await updateUserPassword(user.id, await hashPassword(tempPassword));
+  await updateUserPassword(team.id, user.id, await hashPassword(tempPassword));
 
   return Response.json({ tempPassword });
 }

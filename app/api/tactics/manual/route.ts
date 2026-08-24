@@ -24,7 +24,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const job = await createTacticsJob(session.id, `직접 제작: ${scene.title}`, "manual");
+  const job = await createTacticsJob(
+    session.teamId,
+    session.id,
+    `직접 제작: ${scene.title}`,
+    "manual"
+  );
   await completeTacticsJob(job.id, scene, null);
 
   return Response.json({ jobId: job.id, model: job.model, createdAt: job.createdAt });

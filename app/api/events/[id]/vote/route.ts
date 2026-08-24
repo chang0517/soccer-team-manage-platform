@@ -15,9 +15,10 @@ export async function POST(
   }
 
   const session = await getSessionUser();
-  const isAdmin = session?.role === "admin";
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
+  const isAdmin = session.role === "admin";
 
-  if (!isAdmin && session?.memberId !== Number(body.memberId)) {
+  if (!isAdmin && session.memberId !== Number(body.memberId)) {
     return Response.json(
       { error: "본인 투표만 등록할 수 있어요." },
       { status: 403 }
@@ -25,9 +26,9 @@ export async function POST(
   }
 
   if (!isAdmin) {
-    const event = await getEvent(eventId);
+    const event = await getEvent(session.teamId, eventId);
     if (!event) return Response.json({ error: "not found" }, { status: 404 });
-    const votes = await getVotes(eventId);
+    const votes = await getVotes(session.teamId, eventId);
     const attendCount = votes.filter((v) => v.status === "attend").length;
     if (isVotingClosed(daysUntil(event.date), attendCount)) {
       return Response.json(
@@ -40,6 +41,6 @@ export async function POST(
     }
   }
 
-  await setVote(eventId, Number(body.memberId), body.status);
+  await setVote(session.teamId, eventId, Number(body.memberId), body.status);
   return Response.json({ ok: true });
 }

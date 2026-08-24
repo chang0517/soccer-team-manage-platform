@@ -43,6 +43,7 @@ export function parseSessionToken(token: string | undefined | null): SessionUser
     if (typeof data.exp !== "number" || data.exp < Date.now()) return null;
     return {
       id: data.id,
+      teamId: data.teamId,
       username: data.username,
       displayName: data.displayName,
       role: data.role,
@@ -81,7 +82,7 @@ export async function clearSessionCookie() {
 export async function requireAdmin(): Promise<SessionUser | null> {
   const session = await getSessionUser();
   if (!session) return null;
-  const user = await getUserById(session.id);
+  const user = await getUserById(session.teamId, session.id);
   if (!user || user.status !== "approved" || user.role !== "admin") return null;
   return session;
 }

@@ -17,11 +17,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await getUserByUsername(session.username);
+  const user = await getUserByUsername(session.teamId, session.username);
   if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
     return Response.json({ error: "현재 비밀번호가 올바르지 않아요." }, { status: 401 });
   }
 
-  await updateUserPassword(user.id, await hashPassword(newPassword));
+  await updateUserPassword(session.teamId, user.id, await hashPassword(newPassword));
   return Response.json({ ok: true });
 }
