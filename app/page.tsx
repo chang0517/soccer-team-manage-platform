@@ -65,9 +65,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/ranking?season=${currentSeason()}`).then((r) => r.json()).then(setRanking);
+    // 로그인 전(팀 미소속) 방문자에게는 /api/ranking, /api/events가 둘 다
+    // 401을 준다 — 이때 응답 바디는 배열이 아니라 {error: "..."}라서, 그걸
+    // 그대로 배열 메서드에 넘기면 TypeError가 나서 홈 화면 전체가 죽는다.
+    fetch(`/api/ranking?season=${currentSeason()}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setRanking);
     fetch("/api/events")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .then((evs: EventItem[]) => {
         setEvents(evs);
         const ids = evs
