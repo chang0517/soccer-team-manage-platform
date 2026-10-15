@@ -9,6 +9,7 @@ import type {
   HistoricalStats,
   Member,
   MvpVoteRow,
+  OpponentKitRow,
   PhoneVerificationRow,
   Poll,
   PollOption,
@@ -173,6 +174,13 @@ async function init() {
       clean_sheet_first_id INTEGER,
       overall_first_id INTEGER,
       UNIQUE (team_id, year)
+    );
+    CREATE TABLE IF NOT EXISTS opponent_kits (
+      team_id INTEGER NOT NULL,
+      team_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (team_id, team_name)
     );
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id SERIAL PRIMARY KEY,
@@ -1202,6 +1210,37 @@ export async function upsertHallOfFame(
 export async function deleteHallOfFame(teamId: number, id: number) {
   const pool = await ready();
   await pool.query("DELETE FROM hall_of_fame WHERE id=$1 AND team_id=$2", [id, teamId]);
+}
+
+// ---------- 상대팀 유니폼 색 ----------
+export async function listOpponentKits(teamId: number): Promise<OpponentKitRow[]> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "SELECT team_name, color, updated_at FROM opponent_kits WHERE team_id=$1",
+    [teamId]
+  );
+  return rows.map((r) => ({
+    teamName: r.team_name,
+    color: r.color,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function upsertOpponentKit(
+  teamId: number,
+  teamName: string,
+  color: string
+): Promise<OpponentKitRow> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    `INSERT INTO opponent_kits (team_id, team_name, color, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (team_id, team_name) DO UPDATE SET color=EXCLUDED.color, updated_at=now()
+     RETURNING team_name, color, updated_at`,
+    [teamId, teamName, color]
+  );
+  const r = rows[0];
+  return { teamName: r.team_name, color: r.color, updatedAt: r.updated_at };
 }
 
 // ---------- 웹 푸시 구독 ----------

@@ -11,6 +11,7 @@ import type {
   HistoricalStats,
   Member,
   MvpVoteRow,
+  OpponentKitRow,
   PhoneVerificationRow,
   Poll,
   PollOption,
@@ -157,6 +158,13 @@ function createDb(): Database.Database {
       clean_sheet_first_id INTEGER,
       overall_first_id INTEGER,
       UNIQUE (team_id, year)
+    );
+    CREATE TABLE IF NOT EXISTS opponent_kits (
+      team_id INTEGER NOT NULL,
+      team_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (team_id, team_name)
     );
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1155,6 +1163,40 @@ export function upsertHallOfFame(
 
 export function deleteHallOfFame(teamId: number, id: number) {
   getDb().prepare("DELETE FROM hall_of_fame WHERE id=? AND team_id=?").run(id, teamId);
+}
+
+// ---------- 상대팀 유니폼 색 ----------
+type OpponentKitDbRow = {
+  team_name: string;
+  color: string;
+  updated_at: string;
+};
+
+function toOpponentKit(r: OpponentKitDbRow): OpponentKitRow {
+  return { teamName: r.team_name, color: r.color, updatedAt: r.updated_at };
+}
+
+export function listOpponentKits(teamId: number): OpponentKitRow[] {
+  const rows = getDb()
+    .prepare("SELECT team_name, color, updated_at FROM opponent_kits WHERE team_id=?")
+    .all(teamId) as OpponentKitDbRow[];
+  return rows.map(toOpponentKit);
+}
+
+export function upsertOpponentKit(
+  teamId: number,
+  teamName: string,
+  color: string
+): OpponentKitRow {
+  const updatedAt = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO opponent_kits (team_id, team_name, color, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(team_id, team_name) DO UPDATE SET color=excluded.color, updated_at=excluded.updated_at`
+    )
+    .run(teamId, teamName, color, updatedAt);
+  return { teamName, color, updatedAt };
 }
 
 // ---------- 웹 푸시 구독 ----------

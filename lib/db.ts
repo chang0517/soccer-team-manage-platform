@@ -9,6 +9,7 @@ import type {
   HistoricalStats,
   Member,
   MvpVoteRow,
+  OpponentKitRow,
   PhoneVerificationRow,
   Poll,
   PollOption,
@@ -338,6 +339,19 @@ export async function upsertHallOfFame(
 }
 export async function deleteHallOfFame(teamId: number, id: number) {
   return usePg ? pg.deleteHallOfFame(teamId, id) : sqlite.deleteHallOfFame(teamId, id);
+}
+
+export async function listOpponentKits(teamId: number): Promise<OpponentKitRow[]> {
+  return usePg ? pg.listOpponentKits(teamId) : sqlite.listOpponentKits(teamId);
+}
+export async function upsertOpponentKit(
+  teamId: number,
+  teamName: string,
+  color: string
+): Promise<OpponentKitRow> {
+  return usePg
+    ? pg.upsertOpponentKit(teamId, teamName, color)
+    : sqlite.upsertOpponentKit(teamId, teamName, color);
 }
 
 export async function savePushSubscription(

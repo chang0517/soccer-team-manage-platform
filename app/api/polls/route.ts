@@ -7,6 +7,7 @@ import {
   listPolls,
 } from "@/lib/db";
 import { buildPollDetails } from "@/lib/polls";
+import { sendPushToAll } from "@/lib/push";
 
 export async function GET(request: Request) {
   const session = await getSessionUser();
@@ -52,5 +53,12 @@ export async function POST(request: Request) {
   }
   const multiSelect = body?.multiSelect !== false;
   const poll = await createPoll(session.teamId, title, options, session.memberId, multiSelect);
+
+  await sendPushToAll(session.teamId, {
+    title: "🗳️ 새 투표가 올라왔어요",
+    body: `${session.displayName}님이 "${poll.title}" 투표를 만들었어요.`,
+    url: "/polls",
+  });
+
   return Response.json(poll, { status: 201 });
 }

@@ -8,7 +8,7 @@ import { dDayLabel, formatDate, todayStr } from "@/lib/format";
 import { currentSeason } from "@/lib/season";
 import { WEATHER_EMOJI } from "@/lib/weather";
 import type { MatchWeather } from "@/lib/weather";
-import type { EventItem, RankingRow, VoteRow, VoteStatus } from "@/lib/types";
+import type { EventItem, OpponentKitRow, RankingRow, VoteRow, VoteStatus } from "@/lib/types";
 
 const DUTY_FIELDS: { key: keyof DutyDraft; label: string }[] = [
   { key: "dutyOffense", label: "공가방1" },
@@ -24,6 +24,36 @@ interface DutyDraft {
   iceboxDuty: string;
 }
 
+// 우리 팀이 실제로 보유한 유니폼 두 벌 — 상대팀 색과 대비(WCAG 명암비)가
+// 더 큰 쪽을 추천한다. 정확한 색상은 나중에 실제 유니폼 색에 맞춰 바꾸면 됨.
+const OUR_KITS = [
+  { label: "하늘색 유니폼", hex: "#38bdf8" },
+  { label: "검정 유니폼", hex: "#111111" },
+];
+
+function luminance(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(hexA: string, hexB: string): number {
+  const l1 = luminance(hexA);
+  const l2 = luminance(hexB);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function recommendKit(opponentHex: string): { label: string; swatch: string } {
+  const best = OUR_KITS.reduce((a, b) =>
+    contrastRatio(opponentHex, b.hex) > contrastRatio(opponentHex, a.hex) ? b : a
+  );
+  return { label: `${best.label}을 추천해요`, swatch: best.hex };
+}
+
 export default function HomePage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [ranking, setRanking] = useState<RankingRow[]>([]);
@@ -32,13 +62,15 @@ export default function HomePage() {
   const [noteDrafts, setNoteDrafts] = useState<Record<number, DutyDraft>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [noteSavingId, setNoteSavingId] = useState<number | null>(null);
+  const [opponentKits, setOpponentKits] = useState<Record<string, string>>({});
+  const [kitDrafts, setKitDrafts] = useState<Record<string, string>>({});
+  const [kitSavingTeam, setKitSavingTeam] = useState<string | null>(null);
   const { user } = useSession();
   const myId = user?.memberId ?? null;
 
   const upcoming = events
     .filter((e) => e.date >= todayStr())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 3);
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const loadVotes = useCallback(async (eventIds: number[]) => {
     if (eventIds.length === 0) {
@@ -71,6 +103,11 @@ export default function HomePage() {
     fetch(`/api/ranking?season=${currentSeason()}`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setRanking);
+    fetch("/api/opponent-kits")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((kits: OpponentKitRow[]) =>
+        setOpponentKits(Object.fromEntries(kits.map((k) => [k.teamName, k.color])))
+      );
     fetch("/api/events")
       .then((r) => (r.ok ? r.json() : []))
       .then((evs: EventItem[]) => {
@@ -78,7 +115,6 @@ export default function HomePage() {
         const ids = evs
           .filter((e) => e.date >= todayStr())
           .sort((a, b) => a.date.localeCompare(b.date))
-          .slice(0, 3)
           .map((e) => e.id);
         loadVotes(ids);
         loadWeather(ids);
@@ -116,6 +152,19 @@ export default function HomePage() {
     });
     setNoteSavingId(null);
     setEditingId(null);
+  };
+
+  const saveKit = async (teamName: string) => {
+    const color = kitDrafts[teamName];
+    if (!color) return;
+    setKitSavingTeam(teamName);
+    await fetch("/api/opponent-kits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamName, color }),
+    });
+    setOpponentKits((prev) => ({ ...prev, [teamName]: color }));
+    setKitSavingTeam(null);
   };
 
   const vote = async (eventId: number, status: VoteStatus) => {
@@ -220,6 +269,57 @@ export default function HomePage() {
                   </p>
                 )}
               </div>
+              {e.opponent &&
+                (() => {
+                  const teamName = e.opponent.trim();
+                  const knownColor = opponentKits[teamName];
+                  return (
+                    <div className="mt-3 border-t border-zinc-100 pt-3">
+                      <span className="text-xs font-semibold text-zinc-500">
+                        상대팀 유니폼
+                      </span>
+                      {knownColor ? (
+                        <div className="mt-1.5 flex items-center gap-2 text-sm">
+                          <span
+                            className="h-4 w-4 shrink-0 rounded-full border border-zinc-300"
+                            style={{ backgroundColor: knownColor }}
+                          />
+                          <span className="text-zinc-600">{teamName}팀 기록된 색</span>
+                          <span className="text-zinc-400">·</span>
+                          <span className="flex items-center gap-1.5 font-semibold text-blue-700">
+                            <span
+                              className="h-4 w-4 shrink-0 rounded-full border border-zinc-300"
+                              style={{ backgroundColor: recommendKit(knownColor).swatch }}
+                            />
+                            {recommendKit(knownColor).label}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="color"
+                            className="h-8 w-10 shrink-0 rounded border border-zinc-300"
+                            value={kitDrafts[teamName] ?? "#1e3a8a"}
+                            onChange={(ev) =>
+                              setKitDrafts((d) => ({ ...d, [teamName]: ev.target.value }))
+                            }
+                          />
+                          <p className="flex-1 text-xs text-zinc-400">
+                            {teamName}팀 유니폼 색을 처음 기록해 두면, 다음에 또 만났을 때
+                            자동으로 알려드려요.
+                          </p>
+                          <button
+                            onClick={() => saveKit(teamName)}
+                            disabled={kitSavingTeam === teamName}
+                            className="shrink-0 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                          >
+                            {kitSavingTeam === teamName ? "저장 중…" : "저장"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               <div className="mt-3 border-t border-zinc-100 pt-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-500">비고</span>

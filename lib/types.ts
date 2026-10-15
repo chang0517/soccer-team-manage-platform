@@ -239,7 +239,14 @@ export interface HistoricalStats {
 // 글이고, feedbackDate는 그 피드백이 해당하는 날짜(작성일이 아니라 훈련/
 // 경기가 있었던 날짜)로 그 하위 페이지에서 날짜별로 묶어서 보여줄 때 쓴다.
 // "notice"(일반 공지)에서는 항상 null.
-export type AnnouncementCategory = "notice" | "coach_feedback";
+// "coach_feedback"은 게시판 안의 별도 하위 페이지(코치 피드백)에 실리는
+// 글이고, feedbackDate는 그 피드백이 해당하는 날짜(작성일이 아니라 훈련/
+// 경기가 있었던 날짜)로 그 하위 페이지에서 날짜별로 묶어서 보여줄 때 쓴다.
+// "training"도 같은 식으로 게시판 안의 별도 하위 페이지(훈련 세션)에
+// 실리는데, body에 일반 텍스트가 아니라 훈련 세션용 HTML 전체를 그대로
+// 저장해서 상세 페이지에서 샌드박스 iframe으로 렌더링한다.
+// "notice"(일반 공지)에서는 feedbackDate가 항상 null.
+export type AnnouncementCategory = "notice" | "coach_feedback" | "training";
 
 export interface AnnouncementRow {
   id: number;
@@ -264,6 +271,18 @@ export interface HallOfFameRow {
   topAssistId: number | null;
   cleanSheetFirstId: number | null;
   overallFirstId: number | null;
+}
+
+// 상대팀 유니폼 색 기억 — 한 번 기록해두면 같은 상대팀과 다시 경기가
+// 잡혔을 때 자동으로 불러온다. 색은 <input type="color">로 받은 hex
+// 그대로 저장하고, 우리 팀 추천 색은 저장하지 않고 매번 그 hex의 밝기로
+// 계산한다(간단한 밝은/어두운 대비 추천이라 고정값으로 둘 이유가 없음).
+// 팀마다 상대팀 이름이 겹칠 수 있어서(예: 여러 팀이 같은 "디트로"랑 붙음)
+// team_id까지 포함한 복합키로 구분한다.
+export interface OpponentKitRow {
+  teamName: string;
+  color: string;
+  updatedAt: string;
 }
 
 // 이벤트 투표(월드컵 우승팀 예측 등 자유 주제 투표). 로그인한 회원이면
