@@ -8,6 +8,7 @@ import {
 
 interface ImportEntry {
   name: string;
+  year: number;
   games: number;
   goals: number;
   assists: number;
@@ -33,11 +34,13 @@ export async function PUT(request: Request) {
   }
   const body = await request.json();
   const memberId = Number(body?.memberId);
-  if (!memberId) {
+  const year = Number(body?.year);
+  if (!memberId || !year) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
   await upsertHistoricalStats(admin.teamId, {
     memberId,
+    year,
     games: Number(body.games) || 0,
     goals: Number(body.goals) || 0,
     assists: Number(body.assists) || 0,
@@ -54,10 +57,11 @@ export async function DELETE(request: Request) {
   }
   const body = await request.json();
   const memberId = Number(body?.memberId);
-  if (!memberId) {
+  const year = Number(body?.year);
+  if (!memberId || !year) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
-  await deleteHistoricalStats(admin.teamId, memberId);
+  await deleteHistoricalStats(admin.teamId, memberId, year);
   return Response.json({ ok: true });
 }
 
@@ -83,6 +87,7 @@ export async function POST(request: Request) {
     }
     await upsertHistoricalStats(admin.teamId, {
       memberId: member.id,
+      year: e.year,
       games: e.games,
       goals: e.goals,
       assists: e.assists,

@@ -144,12 +144,14 @@ async function init() {
     );
     CREATE TABLE IF NOT EXISTS historical_stats (
       team_id INTEGER NOT NULL,
-      member_id INTEGER PRIMARY KEY,
+      member_id INTEGER NOT NULL,
+      year INTEGER NOT NULL DEFAULT 0,
       games INTEGER NOT NULL DEFAULT 0,
       goals INTEGER NOT NULL DEFAULT 0,
       assists INTEGER NOT NULL DEFAULT 0,
       clean_pts DOUBLE PRECISION NOT NULL DEFAULT 0,
-      bonus_pts DOUBLE PRECISION NOT NULL DEFAULT 0
+      bonus_pts DOUBLE PRECISION NOT NULL DEFAULT 0,
+      PRIMARY KEY (team_id, member_id, year)
     );
     CREATE TABLE IF NOT EXISTS announcements (
       id SERIAL PRIMARY KEY,
@@ -238,6 +240,18 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // historical_stats가 예전에는 멤버당 한 줄(연도 구분 없음)이었다가
+  // 연도별로 여러 줄을 가질 수 있도록 바뀌어서, 이미 만들어진 테이블에는
+  // year 컬럼과 새 복합 기본키를 직접 맞춰준다.
+  await pool.query(
+    "ALTER TABLE historical_stats ADD COLUMN IF NOT EXISTS year INTEGER NOT NULL DEFAULT 0"
+  );
+  await pool.query(
+    "ALTER TABLE historical_stats DROP CONSTRAINT IF EXISTS historical_stats_pkey"
+  );
+  await pool.query(
+    "ALTER TABLE historical_stats ADD PRIMARY KEY (team_id, member_id, year)"
+  );
 }
 
 async function ready(): Promise<Pool> {
@@ -550,6 +564,14 @@ export async function setVote(
   await pool.query(
     "INSERT INTO votes (team_id, event_id, member_id, status) VALUES ($1, $2, $3, $4) ON CONFLICT (event_id, member_id) DO UPDATE SET status=EXCLUDED.status",
     [teamId, eventId, memberId, status]
+  );
+}
+
+export async function deleteVote(teamId: number, eventId: number, memberId: number) {
+  const pool = await ready();
+  await pool.query(
+    "DELETE FROM votes WHERE team_id=$1 AND event_id=$2 AND member_id=$3",
+    [teamId, eventId, memberId]
   );
 }
 
@@ -1011,6 +1033,7 @@ export async function deleteComment(teamId: number, id: number) {
 
 function toHistorical(r: {
   member_id: number;
+  year: number;
   games: number;
   goals: number;
   assists: number;
@@ -1019,6 +1042,7 @@ function toHistorical(r: {
 }): HistoricalStats {
   return {
     memberId: r.member_id,
+    year: r.year,
     games: r.games,
     goals: r.goals,
     assists: r.assists,
@@ -1039,15 +1063,16 @@ export async function getAllHistoricalStats(teamId: number): Promise<HistoricalS
 export async function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
   const pool = await ready();
   await pool.query(
-    `INSERT INTO historical_stats (team_id, member_id, games, goals, assists, clean_pts, bonus_pts)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (member_id) DO UPDATE SET
+    `INSERT INTO historical_stats (team_id, member_id, year, games, goals, assists, clean_pts, bonus_pts)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (team_id, member_id, year) DO UPDATE SET
        games=EXCLUDED.games, goals=EXCLUDED.goals,
        assists=EXCLUDED.assists, clean_pts=EXCLUDED.clean_pts,
        bonus_pts=EXCLUDED.bonus_pts`,
     [
       teamId,
       stats.memberId,
+      stats.year,
       stats.games,
       stats.goals,
       stats.assists,
@@ -1057,12 +1082,12 @@ export async function upsertHistoricalStats(teamId: number, stats: HistoricalSta
   );
 }
 
-export async function deleteHistoricalStats(teamId: number, memberId: number) {
+export async function deleteHistoricalStats(teamId: number, memberId: number, year: number) {
   const pool = await ready();
-  await pool.query("DELETE FROM historical_stats WHERE member_id=$1 AND team_id=$2", [
-    memberId,
-    teamId,
-  ]);
+  await pool.query(
+    "DELETE FROM historical_stats WHERE member_id=$1 AND team_id=$2 AND year=$3",
+    [memberId, teamId, year]
+  );
 }
 
 function toAnnouncement(r: {

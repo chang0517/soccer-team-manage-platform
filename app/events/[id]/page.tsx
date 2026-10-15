@@ -385,7 +385,7 @@ export default function EventDetailPage({
     load();
   };
 
-  const adminSetVote = async (memberId: number, status: VoteStatus) => {
+  const adminSetVote = async (memberId: number, status: VoteStatus | "none") => {
     await fetch(`/api/events/${id}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1093,13 +1093,14 @@ export default function EventDetailPage({
                               ["attend", "참석"],
                               ["maybe", "미정"],
                               ["absent", "불참"],
-                            ] as [VoteStatus, string][]
+                              ["none", "미투표"],
+                            ] as [VoteStatus | "none", string][]
                           ).map(([status, label]) => (
                             <button
                               key={status}
                               onClick={() => adminSetVote(m.id, status)}
                               className={`rounded-lg px-2 py-1 text-xs font-semibold ${
-                                st === status
+                                (st ?? "none") === status
                                   ? status === "attend"
                                     ? "bg-blue-700 text-white"
                                     : status === "maybe"

@@ -1,8 +1,34 @@
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { completeTacticsJob, createTacticsJob, failTacticsJob } from "@/lib/db";
+import {
+  completeTacticsJob,
+  createTacticsJob,
+  failTacticsJob,
+  listTacticsJobs,
+} from "@/lib/db";
 import { getConfiguredModel } from "@/lib/llm";
 import { generateTacticsScene } from "@/lib/tactics";
+
+// 저장된 전술판 목록 — 직접 만들기(수동)든 AI 생성이든 완료된 전술을 전부
+// 팀의 "저장된 전술" 라이브러리로 보여준다. 운영진만 접근 가능.
+export async function GET() {
+  const session = await requireAdmin();
+  if (!session) {
+    return Response.json({ error: "운영진만 이용할 수 있어요." }, { status: 403 });
+  }
+  const jobs = await listTacticsJobs(session.teamId);
+  return Response.json(
+    jobs
+      .filter((j) => j.status === "done")
+      .map((j) => ({
+        id: j.id,
+        description: j.description,
+        model: j.model,
+        createdAt: j.createdAt,
+        title: j.result?.title ?? j.description,
+      }))
+  );
+}
 
 // 생성이 오래 걸릴 수 있어(맥미니 로컬 모델이 크면 특히) 요청-응답 한 번에
 // 묶지 않는다: 여기서는 작업(job)만 만들어 즉시 jobId를 돌려주고, 실제 LLM

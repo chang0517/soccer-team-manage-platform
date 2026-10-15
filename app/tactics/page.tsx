@@ -7,6 +7,13 @@ import { useSession } from "@/components/useSession";
 import { PITCH_ZONES, ZONE_COLS, ZONE_ROWS } from "@/lib/tacticsZones";
 import type { TacticsScene } from "@/lib/types";
 
+interface TacticsListItem {
+  id: number;
+  title: string;
+  model: string;
+  createdAt: string;
+}
+
 const PLACEHOLDER =
   "예: B5에 있는 오른쪽 윙백이 C3의 미드필더에게 패스하고 A3로 침투해서 스트라이커에게 연결, 헤더로 마무리";
 
@@ -53,6 +60,20 @@ export default function TacticsPage() {
   const [model, setModel] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const pollStartRef = useRef<number>(0);
+  const [savedTactics, setSavedTactics] = useState<TacticsListItem[]>([]);
+  const [savedFetched, setSavedFetched] = useState(false);
+
+  const loadSaved = () =>
+    fetch("/api/tactics")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setSavedTactics(data);
+        setSavedFetched(true);
+      });
+
+  useEffect(() => {
+    if (user?.role === "admin") loadSaved();
+  }, [user]);
 
   useEffect(() => {
     if (jobId == null || status !== "pending") return;
@@ -79,6 +100,7 @@ export default function TacticsPage() {
           setScene(data.result);
           setRawResponse(data.rawResponse ?? null);
           setStatus("done");
+          loadSaved();
         } else if (data.status === "error") {
           clearInterval(timer);
           localStorage.removeItem(JOB_ID_KEY);
@@ -262,6 +284,32 @@ export default function TacticsPage() {
           </pre>
         </details>
       )}
+
+      <div className="mt-8 border-t border-zinc-200 pt-6">
+        <h2 className="mb-1 text-base font-bold">저장된 전술</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          AI로 생성했거나 직접 만들어서 저장한 전술판을 모아둬요.
+        </p>
+        {savedFetched && savedTactics.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400">
+            아직 저장된 전술이 없어요.
+          </p>
+        )}
+        <div className="space-y-2">
+          {savedTactics.map((it) => (
+            <Link
+              key={it.id}
+              href={`/tactics/${it.id}`}
+              className="block rounded-2xl border border-zinc-200 bg-white p-4 hover:bg-zinc-50"
+            >
+              <p className="font-semibold">{it.title}</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                {new Date(it.createdAt).toLocaleString("ko-KR")}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </div>
     </main>
   );
 }

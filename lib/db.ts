@@ -111,6 +111,12 @@ export async function setVote(
     : sqlite.setVote(teamId, eventId, memberId, status);
 }
 
+export async function deleteVote(teamId: number, eventId: number, memberId: number) {
+  return usePg
+    ? pg.deleteVote(teamId, eventId, memberId)
+    : sqlite.deleteVote(teamId, eventId, memberId);
+}
+
 export async function getRecords(teamId: number, eventId: number): Promise<RecordRow[]> {
   return usePg ? pg.getRecords(teamId, eventId) : sqlite.getRecords(teamId, eventId);
 }
@@ -294,10 +300,10 @@ export async function upsertHistoricalStats(teamId: number, stats: HistoricalSta
     ? pg.upsertHistoricalStats(teamId, stats)
     : sqlite.upsertHistoricalStats(teamId, stats);
 }
-export async function deleteHistoricalStats(teamId: number, memberId: number) {
+export async function deleteHistoricalStats(teamId: number, memberId: number, year: number) {
   return usePg
-    ? pg.deleteHistoricalStats(teamId, memberId)
-    : sqlite.deleteHistoricalStats(teamId, memberId);
+    ? pg.deleteHistoricalStats(teamId, memberId, year)
+    : sqlite.deleteHistoricalStats(teamId, memberId, year);
 }
 
 export async function listAnnouncements(teamId: number): Promise<AnnouncementRow[]> {

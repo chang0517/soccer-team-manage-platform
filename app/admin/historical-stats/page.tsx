@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
+import { currentSeason } from "@/lib/season";
 import type { HistoricalStats, Member } from "@/lib/types";
 
 interface Draft {
@@ -25,9 +26,13 @@ export default function HistoricalStatsAdminPage() {
   const { user, loading } = useSession();
   const [members, setMembers] = useState<Member[]>([]);
   const [stats, setStats] = useState<HistoricalStats[]>([]);
-  const [drafts, setDrafts] = useState<Record<number, Draft>>({});
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [newMemberId, setNewMemberId] = useState("");
+  const [newYear, setNewYear] = useState(String(currentSeason()));
+
+  const key = (memberId: number, year: number) => `${memberId}:${year}`;
 
   const load = async () => {
     const [membersRes, statsRes] = await Promise.all([
@@ -41,11 +46,8 @@ export default function HistoricalStatsAdminPage() {
     const statsData: HistoricalStats[] = await statsRes.json();
     setMembers(membersRes);
     setStats(statsData);
-    const byMember = new Map(statsData.map((s) => [s.memberId, s]));
     setDrafts(
-      Object.fromEntries(
-        (membersRes as Member[]).map((m) => [m.id, toDraft(byMember.get(m.id))])
-      )
+      Object.fromEntries(statsData.map((s) => [key(s.memberId, s.year), toDraft(s)]))
     );
   };
 
@@ -67,58 +69,102 @@ export default function HistoricalStatsAdminPage() {
   }
 
   const input = "w-16 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-sm text-right";
+  const memberById = new Map(members.map((m) => [m.id, m]));
 
-  const setDraft = (memberId: number, patch: Partial<Draft>) =>
-    setDrafts((d) => ({ ...d, [memberId]: { ...d[memberId], ...patch } }));
+  const setDraft = (k: string, patch: Partial<Draft>) =>
+    setDrafts((d) => ({ ...d, [k]: { ...(d[k] ?? toDraft()), ...patch } }));
 
-  const save = async (memberId: number) => {
-    const d = drafts[memberId];
-    setSavingId(memberId);
+  const save = async (memberId: number, year: number) => {
+    const k = key(memberId, year);
+    const d = drafts[k] ?? toDraft();
+    setSavingKey(k);
     await fetch("/api/admin/historical-stats", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        memberId,
-        games: d.games,
-        goals: d.goals,
-        assists: d.assists,
-        cleanPts: d.cleanPts,
-        bonusPts: d.bonusPts,
-      }),
+      body: JSON.stringify({ memberId, year, ...d }),
     });
-    setSavingId(null);
+    setSavingKey(null);
     load();
   };
 
-  const remove = async (memberId: number, name: string) => {
-    if (!confirm(`${name}의 역대 누적 기록을 삭제할까요?`)) return;
-    setSavingId(memberId);
+  const remove = async (memberId: number, year: number, name: string) => {
+    if (!confirm(`${name}의 ${year} 시즌 기록을 삭제할까요?`)) return;
+    const k = key(memberId, year);
+    setSavingKey(k);
     await fetch("/api/admin/historical-stats", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memberId }),
+      body: JSON.stringify({ memberId, year }),
     });
-    setSavingId(null);
+    setSavingKey(null);
     load();
   };
 
-  const hasEntry = new Set(stats.map((s) => s.memberId));
-  const sortedMembers = [...members].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const addNew = async () => {
+    const memberId = Number(newMemberId);
+    const year = Number(newYear);
+    if (!memberId || !year) return;
+    if (stats.some((s) => s.memberId === memberId && s.year === year)) {
+      alert("이미 해당 멤버·시즌 항목이 있어요. 아래 목록에서 수정해 주세요.");
+      return;
+    }
+    await save(memberId, year);
+    setNewMemberId("");
+  };
+
+  const sorted = [...stats].sort(
+    (a, b) =>
+      b.year - a.year ||
+      (memberById.get(a.memberId)?.name ?? "").localeCompare(
+        memberById.get(b.memberId)?.name ?? "",
+        "ko"
+      )
+  );
 
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold">역대 누적 기록(랭킹) 관리</h1>
       <p className="text-sm text-zinc-500">
-        앱 도입 이전 스프레드시트로 관리하던 역대 누적 기록을 멤버별로 추가·수정할 수
-        있어요. 여기서 입력한 값은 &quot;전체&quot; 랭킹과 2026 시즌 랭킹에 기준치로
-        더해져요.
+        앱 도입 이전 시즌별 누적 기록을 멤버·시즌 단위로 추가·수정할 수 있어요.
+        여기서 입력한 값은 해당 시즌과 &quot;전체&quot; 랭킹에 기준치로 더해져요.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50/50 p-3">
+        <select
+          className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          value={newMemberId}
+          onChange={(e) => setNewMemberId(e.target.value)}
+        >
+          <option value="">멤버 선택</option>
+          {[...members]
+            .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+            .map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+        </select>
+        <input
+          className="w-20 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          value={newYear}
+          onChange={(e) => setNewYear(e.target.value)}
+          placeholder="시즌(연도)"
+        />
+        <button
+          onClick={addNew}
+          disabled={!newMemberId || !newYear}
+          className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          + 새 항목 추가
+        </button>
+      </div>
 
       <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
               <th className="px-3 py-2.5">이름</th>
+              <th className="px-2 py-2.5 text-center">시즌</th>
               <th className="px-2 py-2.5 text-center">출전</th>
               <th className="px-2 py-2.5 text-center">골</th>
               <th className="px-2 py-2.5 text-center">어시</th>
@@ -128,69 +174,71 @@ export default function HistoricalStatsAdminPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedMembers.map((m) => {
-              const d = drafts[m.id] ?? toDraft();
+            {sorted.map((s) => {
+              const k = key(s.memberId, s.year);
+              const d = drafts[k] ?? toDraft(s);
+              const member = memberById.get(s.memberId);
+              const name = member?.name ?? `#${s.memberId}`;
               return (
-                <tr key={m.id} className="border-b border-zinc-100 last:border-0">
+                <tr key={k} className="border-b border-zinc-100 last:border-0">
                   <td className="px-3 py-2 font-semibold">
-                    {m.name}
-                    {m.backNo != null && (
-                      <span className="ml-1 text-xs text-zinc-400">#{m.backNo}</span>
+                    {name}
+                    {member?.backNo != null && (
+                      <span className="ml-1 text-xs text-zinc-400">#{member.backNo}</span>
                     )}
                   </td>
+                  <td className="px-2 py-2 text-center text-zinc-500">{s.year}</td>
                   <td className="px-2 py-2 text-center">
                     <input
                       className={input}
                       value={d.games}
-                      onChange={(e) => setDraft(m.id, { games: e.target.value })}
+                      onChange={(e) => setDraft(k, { games: e.target.value })}
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
                     <input
                       className={input}
                       value={d.goals}
-                      onChange={(e) => setDraft(m.id, { goals: e.target.value })}
+                      onChange={(e) => setDraft(k, { goals: e.target.value })}
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
                     <input
                       className={input}
                       value={d.assists}
-                      onChange={(e) => setDraft(m.id, { assists: e.target.value })}
+                      onChange={(e) => setDraft(k, { assists: e.target.value })}
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
                     <input
                       className={input}
                       value={d.cleanPts}
-                      onChange={(e) => setDraft(m.id, { cleanPts: e.target.value })}
+                      onChange={(e) => setDraft(k, { cleanPts: e.target.value })}
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
                     <input
                       className={input}
                       value={d.bonusPts}
-                      onChange={(e) => setDraft(m.id, { bonusPts: e.target.value })}
+                      onChange={(e) => setDraft(k, { bonusPts: e.target.value })}
                     />
                   </td>
                   <td className="px-2 py-2 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button
-                        onClick={() => save(m.id)}
-                        disabled={savingId === m.id}
+                        onClick={() => save(s.memberId, s.year)}
+                        disabled={savingKey === k}
                         className="rounded-lg bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40"
                       >
                         저장
                       </button>
-                      {hasEntry.has(m.id) && (
-                        <button
-                          onClick={() => remove(m.id, m.name)}
-                          disabled={savingId === m.id}
-                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-500 disabled:opacity-40"
-                        >
-                          삭제
-                        </button>
-                      )}
+                      <button
+                        onClick={() => remove(s.memberId, s.year, name)}
+                        disabled={savingKey === k}
+                        className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-500 disabled:opacity-40"
+                      >
+                        삭제
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -198,6 +246,11 @@ export default function HistoricalStatsAdminPage() {
             })}
           </tbody>
         </table>
+        {sorted.length === 0 && (
+          <p className="p-6 text-center text-sm text-zinc-400">
+            아직 등록된 역대 기록이 없어요.
+          </p>
+        )}
       </div>
     </div>
   );

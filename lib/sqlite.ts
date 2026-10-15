@@ -128,12 +128,14 @@ function createDb(): Database.Database {
     );
     CREATE TABLE IF NOT EXISTS historical_stats (
       team_id INTEGER NOT NULL,
-      member_id INTEGER PRIMARY KEY,
+      member_id INTEGER NOT NULL,
+      year INTEGER NOT NULL DEFAULT 0,
       games INTEGER NOT NULL DEFAULT 0,
       goals INTEGER NOT NULL DEFAULT 0,
       assists INTEGER NOT NULL DEFAULT 0,
       clean_pts REAL NOT NULL DEFAULT 0,
-      bonus_pts REAL NOT NULL DEFAULT 0
+      bonus_pts REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (team_id, member_id, year)
     );
     CREATE TABLE IF NOT EXISTS announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -520,6 +522,12 @@ export function setVote(teamId: number, eventId: number, memberId: number, statu
       "INSERT INTO votes (team_id, event_id, member_id, status) VALUES (?, ?, ?, ?) ON CONFLICT(event_id, member_id) DO UPDATE SET status=excluded.status"
     )
     .run(teamId, eventId, memberId, status);
+}
+
+export function deleteVote(teamId: number, eventId: number, memberId: number) {
+  getDb()
+    .prepare("DELETE FROM votes WHERE team_id=? AND event_id=? AND member_id=?")
+    .run(teamId, eventId, memberId);
 }
 
 // ---------- records ----------
@@ -968,6 +976,7 @@ export function deleteComment(teamId: number, id: number) {
 type HistoricalDbRow = {
   team_id: number;
   member_id: number;
+  year: number;
   games: number;
   goals: number;
   assists: number;
@@ -978,6 +987,7 @@ type HistoricalDbRow = {
 function toHistorical(r: HistoricalDbRow): HistoricalStats {
   return {
     memberId: r.member_id,
+    year: r.year,
     games: r.games,
     goals: r.goals,
     assists: r.assists,
@@ -996,9 +1006,9 @@ export function getAllHistoricalStats(teamId: number): HistoricalStats[] {
 export function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
   getDb()
     .prepare(
-      `INSERT INTO historical_stats (team_id, member_id, games, goals, assists, clean_pts, bonus_pts)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(member_id) DO UPDATE SET
+      `INSERT INTO historical_stats (team_id, member_id, year, games, goals, assists, clean_pts, bonus_pts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(team_id, member_id, year) DO UPDATE SET
          games=excluded.games, goals=excluded.goals,
          assists=excluded.assists, clean_pts=excluded.clean_pts,
          bonus_pts=excluded.bonus_pts`
@@ -1006,6 +1016,7 @@ export function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
     .run(
       teamId,
       stats.memberId,
+      stats.year,
       stats.games,
       stats.goals,
       stats.assists,
@@ -1014,10 +1025,10 @@ export function upsertHistoricalStats(teamId: number, stats: HistoricalStats) {
     );
 }
 
-export function deleteHistoricalStats(teamId: number, memberId: number) {
+export function deleteHistoricalStats(teamId: number, memberId: number, year: number) {
   getDb()
-    .prepare("DELETE FROM historical_stats WHERE member_id=? AND team_id=?")
-    .run(memberId, teamId);
+    .prepare("DELETE FROM historical_stats WHERE member_id=? AND team_id=? AND year=?")
+    .run(memberId, teamId, year);
 }
 
 // ---------- announcements ----------

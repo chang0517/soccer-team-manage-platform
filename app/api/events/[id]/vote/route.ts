@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getEvent, getVotes, setVote } from "@/lib/db";
+import { deleteVote, getEvent, getVotes, setVote } from "@/lib/db";
 import { isVotingClosed } from "@/lib/rules";
 
 export async function POST(
@@ -9,13 +9,21 @@ export async function POST(
   const { id } = await params;
   const eventId = Number(id);
   const body = await request.json();
-  if (!body.memberId || !["attend", "maybe", "absent"].includes(body.status)) {
+  if (!body.memberId || !["attend", "maybe", "absent", "none"].includes(body.status)) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
   const session = await getSessionUser();
   if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const isAdmin = session.role === "admin";
+
+  // "none"(미투표로 되돌리기)은 운영진만 다른 사람 것을 조작하는 데 의미가 있다.
+  if (body.status === "none" && !isAdmin) {
+    return Response.json(
+      { error: "운영진만 투표를 초기화할 수 있어요." },
+      { status: 403 }
+    );
+  }
 
   if (!isAdmin && session.memberId !== Number(body.memberId)) {
     return Response.json(
@@ -40,6 +48,10 @@ export async function POST(
     }
   }
 
-  await setVote(session.teamId, eventId, Number(body.memberId), body.status);
+  if (body.status === "none") {
+    await deleteVote(session.teamId, eventId, Number(body.memberId));
+  } else {
+    await setVote(session.teamId, eventId, Number(body.memberId), body.status);
+  }
   return Response.json({ ok: true });
 }
