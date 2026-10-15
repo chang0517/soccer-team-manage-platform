@@ -33,33 +33,41 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (await getTeamBySlug(teamSlug)) {
-    return Response.json({ error: "이미 사용 중인 팀 코드예요." }, { status: 409 });
+  try {
+    if (await getTeamBySlug(teamSlug)) {
+      return Response.json({ error: "이미 사용 중인 팀 코드예요." }, { status: 409 });
+    }
+
+    const team = await createTeam({ slug: teamSlug, name: teamName });
+    const passwordHash = await hashPassword(password);
+    const user = await createUser(team.id, {
+      username,
+      passwordHash,
+      displayName,
+      role: "admin",
+      status: "approved",
+      memberId: null,
+    });
+
+    const sessionUser = {
+      id: user.id,
+      teamId: user.teamId,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      memberId: user.memberId,
+    };
+    await setSessionCookie(sessionUser);
+
+    return Response.json(
+      { ok: true, teamSlug: team.slug, token: createSessionToken(sessionUser) },
+      { status: 201 }
+    );
+  } catch (e) {
+    console.error("POST /api/teams failed", e);
+    return Response.json(
+      { error: e instanceof Error ? e.message : "팀 생성에 실패했어요." },
+      { status: 500 }
+    );
   }
-
-  const team = await createTeam({ slug: teamSlug, name: teamName });
-  const passwordHash = await hashPassword(password);
-  const user = await createUser(team.id, {
-    username,
-    passwordHash,
-    displayName,
-    role: "admin",
-    status: "approved",
-    memberId: null,
-  });
-
-  const sessionUser = {
-    id: user.id,
-    teamId: user.teamId,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    memberId: user.memberId,
-  };
-  await setSessionCookie(sessionUser);
-
-  return Response.json(
-    { ok: true, teamSlug: team.slug, token: createSessionToken(sessionUser) },
-    { status: 201 }
-  );
 }
