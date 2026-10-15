@@ -21,24 +21,34 @@ export default function LoginPage() {
     if (!teamSlug.trim() || !username.trim() || !password) return;
     setLoading(true);
     setError("");
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamSlug: teamSlug.trim(),
-        username: username.trim(),
-        password,
-      }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error || "로그인에 실패했어요.");
-      return;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamSlug: teamSlug.trim(),
+          username: username.trim(),
+          password,
+        }),
+      });
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // 서버가 JSON이 아닌 응답(500 HTML 에러 페이지 등)을 준 경우
+      }
+      if (!res.ok) {
+        setError(data.error || `로그인에 실패했어요. (status ${res.status})`);
+        return;
+      }
+      localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("요청에 실패했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
     }
-    localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
-    router.push("/");
-    router.refresh();
   };
 
   const input =

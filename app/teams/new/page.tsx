@@ -30,26 +30,36 @@ export default function NewTeamPage() {
     if (!valid) return;
     setLoading(true);
     setError("");
-    const res = await fetch("/api/teams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamName: teamName.trim(),
-        teamSlug: teamSlug.trim(),
-        displayName: displayName.trim(),
-        username: username.trim(),
-        password,
-      }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error || "팀 생성에 실패했어요.");
-      return;
+    try {
+      const res = await fetch("/api/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamName: teamName.trim(),
+          teamSlug: teamSlug.trim(),
+          displayName: displayName.trim(),
+          username: username.trim(),
+          password,
+        }),
+      });
+      let data: { error?: string; teamSlug?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // 서버가 JSON이 아닌 응답(500 HTML 에러 페이지 등)을 준 경우
+      }
+      if (!res.ok) {
+        setError(data.error || `팀 생성에 실패했어요. (status ${res.status})`);
+        return;
+      }
+      if (data.teamSlug) localStorage.setItem(TEAM_SLUG_KEY, data.teamSlug);
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("요청에 실패했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
     }
-    localStorage.setItem(TEAM_SLUG_KEY, data.teamSlug);
-    router.push("/");
-    router.refresh();
   };
 
   const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";

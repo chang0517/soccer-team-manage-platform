@@ -33,30 +33,40 @@ export default function SignupPage() {
       return;
     setLoading(true);
     setError("");
-    const res = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamSlug: teamSlug.trim(),
-        username: username.trim(),
-        password,
-        displayName: displayName.trim(),
-        pos1,
-        pos2,
-        backNo: backNo === "" ? null : Number(backNo),
-        phone: phone.trim() || null,
-      }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error || "가입에 실패했어요.");
-      return;
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamSlug: teamSlug.trim(),
+          username: username.trim(),
+          password,
+          displayName: displayName.trim(),
+          pos1,
+          pos2,
+          backNo: backNo === "" ? null : Number(backNo),
+          phone: phone.trim() || null,
+        }),
+      });
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // 서버가 JSON이 아닌 응답(500 HTML 에러 페이지 등)을 준 경우
+      }
+      if (!res.ok) {
+        setError(data.error || `가입에 실패했어요. (status ${res.status})`);
+        return;
+      }
+      localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
+      setPendingMsg(
+        "가입 요청이 접수됐어요. 운영진이 이름을 확인하고 승인하면 로그인할 수 있어요."
+      );
+    } catch {
+      setError("요청에 실패했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
     }
-    localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
-    setPendingMsg(
-      "가입 요청이 접수됐어요. 운영진이 이름을 확인하고 승인하면 로그인할 수 있어요."
-    );
   };
 
   const input =
