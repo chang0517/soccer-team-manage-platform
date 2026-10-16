@@ -77,13 +77,18 @@ export default function MigrateTeamPage() {
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
         <label className="block text-xs font-semibold text-zinc-500">
           원본 DATABASE_URL (레이븐/블룸의 Supabase 연결 문자열)
-          <input
-            type="password"
-            className={`${input} mt-1`}
+          <textarea
+            className={`${input} mt-1 resize-none font-mono text-xs`}
+            rows={2}
             placeholder="postgresql://postgres:...@...supabase.com:5432/postgres"
             value={sourceUrl}
             onChange={(e) => setSourceUrl(e.target.value)}
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
           />
         </label>
         <label className="block text-xs font-semibold text-zinc-500">
