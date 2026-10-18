@@ -571,6 +571,30 @@ export function mutateEventRecordLog(
   })();
 }
 
+export function mutateEventSquad(
+  teamId: number,
+  id: number,
+  field: "squad" | "scrimmageSquad",
+  fn: (cur: SquadData | null) => SquadData | null
+): { before: SquadData | null; after: SquadData | null } | null {
+  const col = field === "squad" ? "squad" : "scrimmage_squad";
+  const db = getDb();
+  return db.transaction(() => {
+    const row = db
+      .prepare(`SELECT ${col} AS v FROM events WHERE id=? AND team_id=?`)
+      .get(id, teamId) as { v: string | null } | undefined;
+    if (!row) return null;
+    const before = row.v ? (JSON.parse(row.v) as SquadData) : null;
+    const after = fn(before);
+    db.prepare(`UPDATE events SET ${col}=? WHERE id=? AND team_id=?`).run(
+      after ? JSON.stringify(after) : null,
+      id,
+      teamId
+    );
+    return { before, after };
+  })();
+}
+
 export function claimEventFlag(
   teamId: number,
   id: number,

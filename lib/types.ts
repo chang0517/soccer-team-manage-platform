@@ -158,6 +158,13 @@ export interface SquadData {
   // 이상 모이면 자동으로 확정(잠금)된다 — 깃헙 PR 승인과 비슷한 방식.
   // 스쿼드 구성이 바뀌면(재생성·슬롯 수정 등) 다시 비워져서 재승인이 필요하다.
   approvedBy?: number[];
+  // 제출 → 승인 흐름: 운영진이 다 짠 스쿼드를 "제출"하면(submittedAt) 그때부터
+  // 승인을 받을 수 있고, 승인이 SQUAD_APPROVAL_THRESHOLD명 모이면 확정
+  // (confirmedAt)되면서 그 경기 참석자에게 알림이 간다. 제출 뒤에 라인업을
+  // 고치면 다시 작성 중으로 돌아가 승인도 비워진다.
+  submittedAt?: string | null;
+  submittedBy?: number | null;
+  confirmedAt?: string | null;
 }
 
 export interface QuarterGoalEntry {

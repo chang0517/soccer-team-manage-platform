@@ -4,12 +4,12 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { confirmSheet } from "@/components/ui/ConfirmSheet";
 import { PageSkeleton } from "@/components/ui/Skeleton";
-import type { DragEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TimePicker from "@/components/TimePicker";
 import MatchRecorder from "@/components/MatchRecorder";
 import MvpVoteSection from "@/components/MvpVoteSection";
+import SquadEditor from "@/components/SquadEditor";
 import VoteButtons from "@/components/VoteButtons";
 import { useSession } from "@/components/useSession";
 import { formatDate, dDayLabel } from "@/lib/format";
@@ -18,12 +18,8 @@ import type { MatchWeather } from "@/lib/weather";
 import { normalizeRecordLog, summarizeRecordLog } from "@/lib/records";
 import { ATTEND_CAP, isVotingClosed } from "@/lib/rules";
 import {
-  FORMATION_SLOTS,
   generateSquad,
-  isSquadConfirmed,
-  SLOT_CATEGORY_COLORS,
-  SQUAD_APPROVAL_THRESHOLD,
-  slotDisplayLabel,
+  squadStatus,
   splitScrimmageTeams,
 } from "@/lib/squad";
 import { POS_CATEGORY, POS_CATEGORY_LABELS, POS_GROUPS } from "@/lib/types";
@@ -57,7 +53,6 @@ export default function EventDetailPage({
   );
   const { user } = useSession();
   const myId = user?.memberId ?? null;
-  const [activeQuarter, setActiveQuarter] = useState(0);
   const [activeTeam, setActiveTeam] = useState<"A" | "B">("A");
   const [weather, setWeather] = useState<MatchWeather | null>(null);
   const [showGuestForm, setShowGuestForm] = useState(false);
@@ -130,13 +125,15 @@ export default function EventDetailPage({
     loadWeather();
   }, [loadWeather]);
 
-  // 푸시·홈 카드에서 /events/:id#mvp로 들어오면, 화면이 다 그려진 뒤 MVP
-  // 투표로 스크롤한다(처음 로드 시점엔 섹션이 아직 없어서 브라우저가 못 찾음).
+  // 푸시·홈 카드에서 /events/:id#mvp(MVP 투표)나 #squad(스쿼드 확정 알림)로
+  // 들어오면, 화면이 다 그려진 뒤 그 섹션으로 스크롤한다(처음 로드 시점엔
+  // 섹션이 아직 없어서 브라우저가 못 찾음).
   const eventLoaded = event != null;
   useEffect(() => {
-    if (!eventLoaded || window.location.hash !== "#mvp") return;
+    const target = window.location.hash.slice(1);
+    if (!eventLoaded || (target !== "mvp" && target !== "squad")) return;
     const t = setTimeout(
-      () => document.getElementById("mvp")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" }),
       350
     );
     return () => clearTimeout(t);
@@ -179,15 +176,15 @@ export default function EventDetailPage({
     return [...ids];
   };
   const rosterIds = isScrimmage ? teamRosterIds(currentSquad) : attendIds;
-  const isSquadLocked = isSquadConfirmed(currentSquad);
+  const currentStatus = squadStatus(currentSquad);
+  const isSquadLocked = currentStatus === "confirmed";
   // 스쿼드 자동생성·편집은 운영진만 가능(서버도 동일하게 검사한다).
   const canEditSquad = isAdmin;
-  // 반대 팀으로 옮기는 건 두 팀 스쿼드를 동시에 바꾸는 조작이라, 지금 팀뿐
-  // 아니라 반대 팀도 잠겨있지 않아야(또는 운영진이어야) 허용한다.
+  // 반대 팀으로 옮기는 건 두 팀 스쿼드를 동시에 다시 만드는 조작이라, 두
+  // 팀 다 확정되지 않았을 때만 허용한다(서버도 확정된 스쿼드는 거절한다).
   const otherTeamSquad = activeTeam === "B" ? event.squad : event.scrimmageSquad;
-  const canMoveTeam = isScrimmage && canEditSquad && (!isSquadConfirmed(otherTeamSquad) || isAdmin);
-  const squadApprovedBy = currentSquad?.approvedBy ?? [];
-  const iApprovedSquad = myId != null && squadApprovedBy.includes(myId);
+  const canMoveTeam =
+    isScrimmage && canEditSquad && !isSquadLocked && squadStatus(otherTeamSquad) !== "confirmed";
   const hasAbsenteeInSquad =
     currentSquad?.quarters.some(
       (q) =>
@@ -198,29 +195,6 @@ export default function EventDetailPage({
         ) || q.bench.some((mid) => statusOf(mid) === "absent")
     ) ?? false;
 
-
-  const quarterCounts = (() => {
-    if (!currentSquad) return [] as { memberId: number; count: number }[];
-    const counts = new Map<number, number>();
-    for (const q of currentSquad.quarters) {
-      for (const s of q.starters) {
-        // 하프 분할이면 전반·후반 각각 0.5쿼터씩으로 센다.
-        const weight = s.memberId2 !== undefined ? 0.5 : 1;
-        if (s.memberId != null) counts.set(s.memberId, (counts.get(s.memberId) ?? 0) + weight);
-        if (s.memberId2 != null) counts.set(s.memberId2, (counts.get(s.memberId2) ?? 0) + weight);
-      }
-    }
-    return [...counts.entries()]
-      .map(([memberId, count]) => ({ memberId, count }))
-      .sort(
-        (a, b) =>
-          b.count - a.count ||
-          (memberById.get(a.memberId)?.name ?? "").localeCompare(
-            memberById.get(b.memberId)?.name ?? "",
-            "ko"
-          )
-      );
-  })();
 
   // 오늘 경기 개인 기록(골·어시) — MVP 후보 카드에 같이 보여준다.
   const recordSummary = summarizeRecordLog(recordLog);
@@ -319,9 +293,20 @@ export default function EventDetailPage({
   // 내전 모드가 아니면(=평소 단일 팀) 서버가 참석 투표를 다시 읽어 A팀
   // 스쿼드를 새로 만든다. 내전 모드면 지금 보고 있는 팀의 기존 로스터
   // (팀을 새로 나누지 않고) 그대로 포메이션·쿼터만 다시 섞는다.
+  const confirmSquadReset = async () =>
+    currentStatus !== "submitted" ||
+    (await confirmSheet({
+      title: "제출된 스쿼드를 바꿀까요?",
+      description: "받은 승인이 초기화되고, 다시 제출해야 해요.",
+      confirmText: "바꾸기",
+    }));
+
   const regenerate = async () => {
+    if (currentSquad && !(await confirmSheet({ title: "스쿼드를 새로 만들까요?", description: "직접 고친 내용이 모두 사라지고 자동으로 다시 짜요." + (currentStatus === "submitted" ? " 받은 승인도 초기화돼요." : ""), confirmText: "다시 만들기" })))
+      return;
     if (!isScrimmage) {
-      await fetch(`/api/events/${id}/squad`, { method: "POST" });
+      const res = await fetch(`/api/events/${id}/squad`, { method: "POST" });
+      if (!res.ok) toast.error((await res.json().catch(() => null))?.error || "스쿼드를 만들지 못했어요.");
       load();
       return;
     }
@@ -371,6 +356,7 @@ export default function EventDetailPage({
   // 로스터로 포메이션을 다시 만든다(어느 슬롯에 배정될지는 다시 계산됨).
   const moveToOtherTeam = async (memberId: number) => {
     if (!event.squad || !event.scrimmageSquad) return;
+    if (!(await confirmSquadReset())) return;
     const aIds = teamRosterIds(event.squad);
     const bIds = teamRosterIds(event.scrimmageSquad);
     const movingFromA = aIds.includes(memberId);
@@ -391,33 +377,13 @@ export default function EventDetailPage({
     load();
   };
 
-  // 운영진 전용 비상 해제 — 승인 수와 상관없이 즉시 잠금을 풀고 승인 목록도
-  // 비운다(다시 확정하려면 처음부터 새로 승인을 모아야 한다).
-  const unlockSquad = async () => {
-    if (!currentSquad) return;
-    await fetch(`/api/events/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [squadField]: { ...currentSquad, confirmed: false, approvedBy: [] },
-      }),
-    });
-    load();
-  };
-
-  // 내가 이미 승인했으면 취소, 아니면 승인 추가. SQUAD_APPROVAL_THRESHOLD명
-  // 이상 모이면 isSquadConfirmed가 자동으로 확정 상태로 인식한다.
-  const toggleSquadApproval = async () => {
-    await fetch(`/api/events/${id}/squad/approve?team=${activeTeam}`, { method: "POST" });
-    load();
-  };
-
   // 불참으로 바뀐 멤버를 스쿼드(선발+벤치)에서 완전히 빼낸다. 내전 모드의
   // rosterIds는 참석 투표가 아니라 팀 배정 기준이라, 불참 처리해도 그냥 두면
   // 벤치로 다시 채워져버리므로 여기서 명시적으로 걸러낸다. 승인은 스쿼드
   // 구성이 바뀌는 것이므로 재승인이 필요하도록 비운다.
   const removeAbsenteesFromSquad = async () => {
     if (!currentSquad) return;
+    if (!(await confirmSquadReset())) return;
     const isAbsent = (mid: number | null | undefined) =>
       mid != null && statusOf(mid) === "absent";
     const quarters = currentSquad.quarters.map((q) => {
@@ -442,113 +408,6 @@ export default function EventDetailPage({
       body: JSON.stringify({ [squadField]: squad }),
     });
     load();
-  };
-
-  // 슬롯 배정을 바꾸는 모든 조작(단일 배정, 하프 분할, 드래그 맞교체, 벤치 교체)의
-  // 공통 진입점. starters 배열을 변형하는 함수를 받아 벤치를 재계산하고 저장한다.
-  // 스쿼드 구성이 바뀌는 조작이므로 확정/승인 상태는 초기화한다(재승인 필요).
-  const updateStarters = async (
-    quarterIdx: number,
-    transform: (starters: SquadData["quarters"][number]["starters"]) => SquadData["quarters"][number]["starters"]
-  ) => {
-    if (!currentSquad) return;
-    const quarters = currentSquad.quarters.map((q, qi) => {
-      if (qi !== quarterIdx) return q;
-      const starters = transform(q.starters);
-      const starterIds = new Set(
-        starters.flatMap((s) => [s.memberId, s.memberId2 ?? null]).filter((v): v is number => v != null)
-      );
-      return { starters, bench: rosterIds.filter((mid) => !starterIds.has(mid)) };
-    });
-    const squad: SquadData = { ...currentSquad, quarters, confirmed: false, approvedBy: [] };
-    await fetch(`/api/events/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [squadField]: squad }),
-    });
-    load();
-  };
-
-  const clearMemberElsewhere = (
-    starters: SquadData["quarters"][number]["starters"],
-    slotId: string,
-    memberId: number
-  ) =>
-    starters.map((s) => {
-      if (s.slotId === slotId) return s;
-      const patch: Partial<{ memberId: number | null; memberId2: number | null }> = {};
-      if (s.memberId === memberId) patch.memberId = null;
-      if (s.memberId2 === memberId) patch.memberId2 = null;
-      return Object.keys(patch).length ? { ...s, ...patch } : s;
-    });
-
-  const assignSlot = (
-    quarterIdx: number,
-    slotId: string,
-    half: "full" | "first" | "second",
-    memberIdRaw: string
-  ) => {
-    const newId = memberIdRaw ? Number(memberIdRaw) : null;
-    updateStarters(quarterIdx, (starters) => {
-      let next = newId != null ? clearMemberElsewhere(starters, slotId, newId) : starters;
-      next = next.map((s) => {
-        if (s.slotId !== slotId) return s;
-        if (half === "first") return { ...s, memberId: newId };
-        if (half === "second") return { ...s, memberId2: newId };
-        return { ...s, memberId: newId };
-      });
-      return next;
-    });
-  };
-
-  const toggleHalfSplit = (quarterIdx: number, slotId: string) => {
-    updateStarters(quarterIdx, (starters) =>
-      starters.map((s) => {
-        if (s.slotId !== slotId) return s;
-        if (s.memberId2 !== undefined) {
-          return { slotId: s.slotId, memberId: s.memberId };
-        }
-        return { ...s, memberId2: null };
-      })
-    );
-  };
-
-  const swapSlots = (quarterIdx: number, slotIdA: string, slotIdB: string) => {
-    if (slotIdA === slotIdB) return;
-    updateStarters(quarterIdx, (starters) => {
-      const a = starters.find((s) => s.slotId === slotIdA);
-      const b = starters.find((s) => s.slotId === slotIdB);
-      if (!a || !b) return starters;
-      return starters.map((s) => {
-        if (s.slotId === slotIdA) return { ...s, memberId: b.memberId, memberId2: b.memberId2 };
-        if (s.slotId === slotIdB) return { ...s, memberId: a.memberId, memberId2: a.memberId2 };
-        return s;
-      });
-    });
-  };
-
-  const substituteFromBench = (quarterIdx: number, slotId: string, benchMemberId: number) => {
-    updateStarters(quarterIdx, (starters) =>
-      clearMemberElsewhere(starters, slotId, benchMemberId).map((s) =>
-        s.slotId === slotId ? { ...s, memberId: benchMemberId } : s
-      )
-    );
-  };
-
-  const handleSlotDragStart = (e: DragEvent, slotId: string) => {
-    e.dataTransfer.setData("text/plain", `slot:${slotId}`);
-  };
-  const handleBenchDragStart = (e: DragEvent, memberId: number) => {
-    e.dataTransfer.setData("text/plain", `bench:${memberId}`);
-  };
-  const handleSlotDrop = (e: DragEvent, targetSlotId: string) => {
-    e.preventDefault();
-    const data = e.dataTransfer.getData("text/plain");
-    if (data.startsWith("slot:")) {
-      swapSlots(activeQuarter, data.slice(5), targetSlotId);
-    } else if (data.startsWith("bench:")) {
-      substituteFromBench(activeQuarter, targetSlotId, Number(data.slice(6)));
-    }
   };
 
   const removeEvent = async () => {
@@ -601,9 +460,6 @@ export default function EventDetailPage({
     if (data.failed.length > 0) parts.push(`발송 실패 ${data.failed.length}명`);
     setNotifyResult(parts.join(" · ") || "보낼 대상이 없어요.");
   };
-
-  const nameOf = (mid: number | null) =>
-    mid != null ? (memberById.get(mid)?.name ?? "?") : "미정";
 
   // 스쿼드를 짤 때 공격/미드필더/수비 인원을 한눈에 보려고 포지션(1순위)
   // 카테고리별로 묶어서 보여준다.
@@ -1059,23 +915,13 @@ export default function EventDetailPage({
       </section>
 
       {event.type === "match" && (
-        <section className="card p-4">
+        <section id="squad" className="card scroll-mt-20 p-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-extrabold tracking-tight">스쿼드 (4-1-2-2-1)</h2>
-              {isSquadLocked && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
-                  🔒 확정된 스쿼드
-                </span>
-              )}
-              {!isSquadLocked && squadApprovedBy.length > 0 && (
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800">
-                  승인 {squadApprovedBy.length}/{SQUAD_APPROVAL_THRESHOLD}
-                </span>
-              )}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {isAdmin && (
+              {isAdmin && !isSquadLocked && (
                 <button
                   onClick={splitScrimmage}
                   className="rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
@@ -1091,7 +937,7 @@ export default function EventDetailPage({
                   내전 모드 종료
                 </button>
               )}
-              {isAdmin && currentSquad && hasAbsenteeInSquad && (
+              {isAdmin && currentSquad && hasAbsenteeInSquad && !isSquadLocked && (
                 <button
                   onClick={removeAbsenteesFromSquad}
                   className="rounded-xl bg-red-500 px-3 py-1.5 text-xs font-semibold text-white"
@@ -1099,19 +945,7 @@ export default function EventDetailPage({
                   불참자 정리
                 </button>
               )}
-              {isAdmin && currentSquad && (
-                <button
-                  onClick={isSquadLocked ? unlockSquad : toggleSquadApproval}
-                  disabled={!isSquadLocked && !myId}
-                  title={!isSquadLocked && !myId ? "멤버 프로필과 연결돼야 승인할 수 있어요" : undefined}
-                  className="rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                >
-                  {isSquadLocked
-                    ? "확정 해제"
-                    : `${iApprovedSquad ? "승인 취소" : "승인"} (${squadApprovedBy.length}/${SQUAD_APPROVAL_THRESHOLD})`}
-                </button>
-              )}
-              {canEditSquad && (
+              {canEditSquad && !isSquadLocked && (
                 <button
                   onClick={regenerate}
                   className="rounded-xl bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white"
@@ -1141,19 +975,10 @@ export default function EventDetailPage({
               </button>
             </div>
           )}
-          {squadApprovedBy.length > 0 && (
-            <p className="mb-2 text-xs text-zinc-400">
-              승인: {squadApprovedBy.map((mid) => memberById.get(mid)?.name ?? "?").join(", ")}
-            </p>
-          )}
           <p className="mb-3 text-xs text-zinc-400">
             {isScrimmage
-              ? "내전(자체 훈련) 모드예요. 참석자를 포지션 균형에 맞춰 두 팀으로 나눠서, 팀마다 4-1-2-2-1 포메이션·쿼터를 따로 관리해요."
-              : "경기 3일 전이 되면 참석 투표 기준으로 쿼터별(1~4쿼터) 스쿼드가 자동 생성돼요. 포지션은 각자 등록된 1·2순위 선호를, 출전 기회는 쿼터를 거듭할수록 덜 뛴 사람을 우선해서 나눠요."}
-            {" "}운영진 {SQUAD_APPROVAL_THRESHOLD}명 이상이 승인하면 자동으로 확정돼요.
-            {canEditSquad
-              ? " 아래 선수 아이콘을 드래그해서 다른 자리와 맞바꿀 수 있어요."
-              : " 스쿼드는 운영진만 수정할 수 있어요."}
+              ? "내전(자체 훈련) 모드예요. 참석자를 포지션 균형에 맞춰 두 팀으로 나눠서, 팀마다 포메이션·쿼터를 따로 관리해요."
+              : "경기 3일 전이 되면 참석 투표 기준으로 쿼터별 스쿼드가 자동으로 만들어져요."}
           </p>
 
           {currentSquad ? (
@@ -1194,219 +1019,20 @@ export default function EventDetailPage({
                 </div>
               </div>
 
-              <div className="mb-3 grid grid-cols-4 gap-1.5">
-                {currentSquad.quarters.map((_, qi) => (
-                  <button
-                    key={qi}
-                    onClick={() => setActiveQuarter(qi)}
-                    className={`rounded-xl py-2 text-sm font-semibold ${
-                      activeQuarter === qi
-                        ? "bg-blue-700 text-white"
-                        : "bg-zinc-100 text-zinc-600"
-                    }`}
-                  >
-                    {qi + 1}쿼터
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl bg-blue-700" style={{ aspectRatio: "3 / 4" }}>
-                <div className="absolute inset-3 rounded-xl border-2 border-blue-300/50" />
-                <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-300/50" />
-                <div className="absolute left-3 right-3 top-1/2 border-t-2 border-blue-300/50" />
-                {FORMATION_SLOTS.map((slot) => {
-                  const asg = currentSquad!.quarters[activeQuarter].starters.find(
-                    (s) => s.slotId === slot.id
-                  );
-                  const isSplit = asg?.memberId2 !== undefined;
-                  return (
-                    <div
-                      key={slot.id}
-                      draggable={canEditSquad}
-                      onDragStart={
-                        canEditSquad ? (e) => handleSlotDragStart(e, slot.id) : undefined
-                      }
-                      onDragOver={canEditSquad ? (e) => e.preventDefault() : undefined}
-                      onDrop={canEditSquad ? (e) => handleSlotDrop(e, slot.id) : undefined}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 text-center ${canEditSquad ? "cursor-grab active:cursor-grabbing" : ""}`}
-                      style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
-                    >
-                      <div
-                        className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold ${SLOT_CATEGORY_COLORS[slot.category].bg} ${SLOT_CATEGORY_COLORS[slot.category].text}`}
-                      >
-                        {slot.label}
-                      </div>
-                      {isSplit ? (
-                        <p className="mt-0.5 max-w-20 truncate rounded bg-blue-950/60 px-1 text-[10px] font-semibold text-white">
-                          {nameOf(asg?.memberId ?? null)} / {nameOf(asg?.memberId2 ?? null)}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 max-w-16 truncate rounded bg-blue-950/60 px-1 text-[11px] font-semibold text-white">
-                          {nameOf(asg?.memberId ?? null)}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-2 flex justify-center gap-3 text-[11px] text-zinc-500">
-                <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />수비
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-violet-300" />미드필더
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />공격
-                </span>
-              </div>
-
-              {currentSquad.quarters[activeQuarter].bench.length > 0 && (
-                <div className="mt-3 text-sm">
-                  <span className="font-semibold text-zinc-500">
-                    교체 대기{canEditSquad && " (드래그해서 자리에 투입)"}:
-                  </span>{" "}
-                  <span className="mt-1 flex flex-wrap gap-1.5">
-                    {currentSquad.quarters[activeQuarter].bench.map((mid) => {
-                      const m = memberById.get(mid);
-                      return (
-                        <span
-                          key={mid}
-                          draggable={canEditSquad}
-                          onDragStart={
-                            canEditSquad ? (e) => handleBenchDragStart(e, mid) : undefined
-                          }
-                          className={`rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600 ${canEditSquad ? "cursor-grab active:cursor-grabbing" : ""}`}
-                        >
-                          {m ? `${m.name}${m.isGuest ? "(용병)" : ""}` : "?"}
-                        </span>
-                      );
-                    })}
-                  </span>
-                </div>
-              )}
-
-              {quarterCounts.length > 0 && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-sm font-semibold text-blue-700">
-                    인당 출전 쿼터 수 (전체 {currentSquad.quarters.length}쿼터 중)
-                  </summary>
-                  <div className="mt-2 space-y-3">
-                    {CATEGORY_ORDER.map((cat) => {
-                      const rows = quarterCounts.filter(({ memberId }) => {
-                        const m = memberById.get(memberId);
-                        return m && POS_CATEGORY[m.pos1] === cat;
-                      });
-                      if (rows.length === 0) return null;
-                      return (
-                        <div key={cat}>
-                          <p className="mb-1 text-xs font-bold text-zinc-400">
-                            {POS_CATEGORY_LABELS[cat]}
-                          </p>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm sm:grid-cols-3">
-                            {rows.map(({ memberId, count }) => {
-                              const m = memberById.get(memberId);
-                              return (
-                                <div key={memberId} className="flex justify-between">
-                                  <span>
-                                    {m?.name ?? "?"}
-                                    {m?.isGuest ? " · 용병" : ""}
-                                  </span>
-                                  <span className="font-semibold text-zinc-500">
-                                    {count}쿼터
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </details>
-              )}
-
-              {canEditSquad && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm font-semibold text-blue-700">
-                  {activeQuarter + 1}쿼터 수동으로 조정하기
-                </summary>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {FORMATION_SLOTS.map((slot) => {
-                    const asg = currentSquad!.quarters[activeQuarter].starters.find(
-                      (s) => s.slotId === slot.id
-                    );
-                    const isSplit = asg?.memberId2 !== undefined;
-                    const memberOptions = (excludeId: number | null) =>
-                      members
-                        .filter((m) => rosterIds.includes(m.id) || m.id === excludeId)
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.pos1}/{m.pos2}){m.isGuest ? " · 용병" : ""}
-                          </option>
-                        ));
-                    return (
-                      <div key={slot.id} className="space-y-1 rounded-lg border border-zinc-100 p-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-16 shrink-0 text-xs font-bold text-zinc-500">
-                            {slotDisplayLabel(slot)}
-                          </span>
-                          {!isSplit && (
-                            <select
-                              className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                              value={asg?.memberId ?? ""}
-                              onChange={(e) =>
-                                assignSlot(activeQuarter, slot.id, "full", e.target.value)
-                              }
-                            >
-                              <option value="">(비움)</option>
-                              {memberOptions(asg?.memberId ?? null)}
-                            </select>
-                          )}
-                          <button
-                            onClick={() => toggleHalfSplit(activeQuarter, slot.id)}
-                            className="shrink-0 rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-600"
-                          >
-                            {isSplit ? "하프분할 취소" : "하프분할"}
-                          </button>
-                        </div>
-                        {isSplit && (
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="flex items-center gap-1">
-                              <span className="shrink-0 text-[11px] text-zinc-400">전반</span>
-                              <select
-                                className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                                value={asg?.memberId ?? ""}
-                                onChange={(e) =>
-                                  assignSlot(activeQuarter, slot.id, "first", e.target.value)
-                                }
-                              >
-                                <option value="">(비움)</option>
-                                {memberOptions(asg?.memberId ?? null)}
-                              </select>
-                            </label>
-                            <label className="flex items-center gap-1">
-                              <span className="shrink-0 text-[11px] text-zinc-400">후반</span>
-                              <select
-                                className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                                value={asg?.memberId2 ?? ""}
-                                onChange={(e) =>
-                                  assignSlot(activeQuarter, slot.id, "second", e.target.value)
-                                }
-                              >
-                                <option value="">(비움)</option>
-                                {memberOptions(asg?.memberId2 ?? null)}
-                              </select>
-                            </label>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
-              )}
+              <SquadEditor
+                key={activeTeam}
+                eventId={Number(id)}
+                team={activeTeam}
+                squad={currentSquad}
+                members={members}
+                rosterIds={rosterIds}
+                isAdmin={isAdmin}
+                myId={myId}
+                onSquadChange={(sq) => {
+                  const field = squadField;
+                  setEvent((ev) => (ev ? { ...ev, [field]: sq } : ev));
+                }}
+              />
             </>
           ) : (
             <p className="rounded-2xl bg-zinc-50 p-5 text-center text-sm text-zinc-400">

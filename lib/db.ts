@@ -18,6 +18,7 @@ import type {
   QuarterRecordEntry,
   RecordRow,
   ScoreRules,
+  SquadData,
   TeamRow,
   UserRole,
   UserStatus,
@@ -120,6 +121,16 @@ export async function mutateEventRecordLog(
   return usePg
     ? pg.mutateEventRecordLog(teamId, id, fn)
     : sqlite.mutateEventRecordLog(teamId, id, fn);
+}
+export async function mutateEventSquad(
+  teamId: number,
+  id: number,
+  field: "squad" | "scrimmageSquad",
+  fn: (cur: SquadData | null) => SquadData | null
+): Promise<{ before: SquadData | null; after: SquadData | null } | null> {
+  return usePg
+    ? pg.mutateEventSquad(teamId, id, field, fn)
+    : sqlite.mutateEventSquad(teamId, id, field, fn);
 }
 export async function claimEventFlag(
   teamId: number,

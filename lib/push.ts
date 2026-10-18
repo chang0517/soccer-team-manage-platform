@@ -77,3 +77,23 @@ export async function sendPushToMembers(
   );
   await sendTo(subs, payload);
 }
+
+// 멤버마다 내용이 다른 알림(예: 각자의 출전 쿼터)을 보낸다. 구독 목록은 한
+// 번만 읽는다. 알림을 켠 기기가 있어 실제로 보낸 멤버 수를 돌려준다.
+export async function sendPushToEach(
+  teamId: number,
+  items: { memberId: number; payload: { title: string; body: string; url: string } }[]
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const subs = await getAllPushSubscriptions(teamId);
+  let reached = 0;
+  await Promise.all(
+    items.map(async ({ memberId, payload }) => {
+      const mine = subs.filter((s) => s.memberId === memberId);
+      if (mine.length === 0) return;
+      reached++;
+      await sendTo(mine, payload);
+    })
+  );
+  return reached;
+}

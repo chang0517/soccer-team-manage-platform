@@ -714,6 +714,47 @@ export async function mutateEventRecordLog(
   }
 }
 
+/**
+ * 스쿼드(A팀 squad 또는 내전 B팀 scrimmage_squad)를 행 잠금 트랜잭션 안에서
+ * 바꾼다. 운영진 여러 명이 동시에 승인을 눌러도 승인이 빠지지 않고, 확정
+ * 전환은 정확히 한 요청만 보게 된다. fn이 던지면 아무것도 바꾸지 않는다.
+ */
+export async function mutateEventSquad(
+  teamId: number,
+  id: number,
+  field: "squad" | "scrimmageSquad",
+  fn: (cur: SquadData | null) => SquadData | null
+): Promise<{ before: SquadData | null; after: SquadData | null } | null> {
+  const col = field === "squad" ? "squad" : "scrimmage_squad";
+  const pool = await ready();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT ${col} AS v FROM events WHERE id=$1 AND team_id=$2 FOR UPDATE`,
+      [id, teamId]
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    const before = (rows[0].v ?? null) as SquadData | null;
+    const after = fn(before);
+    await client.query(`UPDATE events SET ${col}=$1 WHERE id=$2 AND team_id=$3`, [
+      after ? JSON.stringify(after) : null,
+      id,
+      teamId,
+    ]);
+    await client.query("COMMIT");
+    return { before, after };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // 알림 플래그를 false→true로 바꾸는 데 성공한 호출만 true를 받는다 — 여러
 // 요청이 동시에 같은 알림을 보내려 해도 한 번만 나가게 하는 용도.
 export async function claimEventFlag(

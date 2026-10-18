@@ -9,7 +9,7 @@ import {
   updateEvent,
 } from "@/lib/db";
 import { daysUntil } from "@/lib/format";
-import { FORMATION_SLOTS, generateSquad, isSquadConfirmed } from "@/lib/squad";
+import { asDraft, FORMATION_SLOTS, generateSquad, isSquadConfirmed, squadStatus } from "@/lib/squad";
 
 const CURRENT_SLOT_IDS = new Set(FORMATION_SLOTS.map((s) => s.id));
 
@@ -95,6 +95,20 @@ export async function PATCH(
       { error: "스쿼드는 운영진만 수정할 수 있어요." },
       { status: 403 }
     );
+  }
+  // 내전 나누기·팀 이동처럼 스쿼드를 통째로 새로 만드는 조작도 이 경로를
+  // 쓴다. 확정된 스쿼드는 확정 해제 전에는 덮어쓸 수 없고, 새로 들어온
+  // 스쿼드는 항상 작성 중 상태로 저장한다(제출·승인은 squad/status에서만).
+  for (const field of ["squad", "scrimmageSquad"] as const) {
+    if (!body[field]) continue;
+    const cur = await getEvent(session.teamId, Number(id));
+    if (squadStatus(cur?.[field]) === "confirmed") {
+      return Response.json(
+        { error: "확정된 스쿼드예요. 고치려면 먼저 확정을 해제해 주세요." },
+        { status: 409 }
+      );
+    }
+    body[field] = asDraft(body[field]);
   }
   if (ADMIN_ONLY_FIELDS.some((f) => body[f] !== undefined) && !(await requireAdmin())) {
     return Response.json(

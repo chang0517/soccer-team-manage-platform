@@ -222,3 +222,143 @@ export function splitScrimmageTeams(attendees: Member[]): {
 
   return { teamA, teamB };
 }
+
+// ---------- 제출 → 승인 → 확정 ----------
+
+export type SquadStatus = "draft" | "submitted" | "confirmed";
+
+export function squadStatus(squad: SquadData | null | undefined): SquadStatus {
+  if (!squad) return "draft";
+  if (isSquadConfirmed(squad)) return "confirmed";
+  return squad.submittedAt ? "submitted" : "draft";
+}
+
+// 라인업이 바뀐 스쿼드는 처음부터 다시 제출·승인받아야 한다.
+export function asDraft(squad: SquadData): SquadData {
+  return {
+    ...squad,
+    confirmed: false,
+    approvedBy: [],
+    submittedAt: null,
+    submittedBy: null,
+    confirmedAt: null,
+  };
+}
+
+export type SquadAction = "submit" | "withdraw" | "approve" | "unapprove" | "unlock";
+
+export class SquadActionError extends Error {}
+
+/**
+ * 스쿼드 상태 전환. memberId는 버튼을 누른 운영진. 규칙에 안 맞으면
+ * SquadActionError(사용자에게 보여줄 문구)를 던진다.
+ */
+export function applySquadAction(
+  squad: SquadData,
+  action: SquadAction,
+  memberId: number
+): SquadData {
+  const status = squadStatus(squad);
+  const approvedBy = squad.approvedBy ?? [];
+  switch (action) {
+    case "submit":
+      if (status !== "draft") throw new SquadActionError("이미 제출된 스쿼드예요.");
+      return {
+        ...asDraft(squad),
+        submittedAt: new Date().toISOString(),
+        submittedBy: memberId,
+      };
+    case "withdraw":
+      if (status !== "submitted") throw new SquadActionError("승인 대기 중인 스쿼드가 아니에요.");
+      return asDraft(squad);
+    case "approve": {
+      if (status === "draft") throw new SquadActionError("먼저 스쿼드를 제출해 주세요.");
+      if (status === "confirmed") throw new SquadActionError("이미 확정된 스쿼드예요.");
+      if (approvedBy.includes(memberId)) return squad;
+      const next = { ...squad, approvedBy: [...approvedBy, memberId] };
+      return isSquadConfirmed(next) ? { ...next, confirmedAt: new Date().toISOString() } : next;
+    }
+    case "unapprove":
+      if (status !== "submitted") throw new SquadActionError("승인 대기 중일 때만 승인을 취소할 수 있어요.");
+      return { ...squad, approvedBy: approvedBy.filter((m) => m !== memberId) };
+    case "unlock":
+      if (status !== "confirmed") throw new SquadActionError("확정된 스쿼드가 아니에요.");
+      return asDraft(squad);
+  }
+}
+
+/** 선수가 그 슬롯에 얼마나 맞는지: 0 1순위, 1 2순위, 2 같은 라인, 3 다른 라인. */
+export function slotFit(slotId: string, member: Member): number {
+  const slot = FORMATION_SLOTS.find((s) => s.id === slotId);
+  if (!slot) return 3;
+  if (slot.accepts.includes(member.pos1)) return 0;
+  if (slot.accepts.includes(member.pos2)) return 1;
+  if (categoryOf(member.pos1) === slot.category || categoryOf(member.pos2) === slot.category) {
+    return 2;
+  }
+  return 3;
+}
+
+/** 4쿼터 동안 선수별 출전 쿼터 수(하프 분할은 0.5). */
+export function squadPlayCounts(squad: SquadData): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const q of squad.quarters) {
+    for (const s of q.starters) {
+      const w = s.memberId2 !== undefined ? 0.5 : 1;
+      for (const mid of [s.memberId, s.memberId2]) {
+        if (mid != null) counts.set(mid, (counts.get(mid) ?? 0) + w);
+      }
+    }
+  }
+  return counts;
+}
+
+/** 쿼터별 내 자리 — ["CB", "휴식", "LB 전반", "CB"] 같은 목록. */
+export function memberQuarterRoles(squad: SquadData, memberId: number): string[] {
+  return squad.quarters.map((q) => {
+    for (const s of q.starters) {
+      const label = FORMATION_SLOTS.find((d) => d.id === s.slotId)?.label ?? s.slotId;
+      if (s.memberId === memberId) return s.memberId2 !== undefined ? `${label} 전반` : label;
+      if (s.memberId2 === memberId) return `${label} 후반`;
+    }
+    return "휴식";
+  });
+}
+
+/**
+ * 비어 있는 자리만 채운다(직접 손본 자리는 그대로). 그 쿼터 벤치에서 자리에
+ * 잘 맞는 포지션 → 지금까지 덜 뛴 선수 순으로 고르고, 다른 라인(수비↔공격)
+ * 선수는 넣지 않는다.
+ */
+export function fillEmptySlots(
+  squad: SquadData,
+  roster: Member[]
+): { squad: SquadData; filled: number } {
+  const counts = squadPlayCounts(squad);
+  const byId = new Map(roster.map((m) => [m.id, m]));
+  let filled = 0;
+  const quarters = squad.quarters.map((q) => {
+    const starters = q.starters.map((s) => ({ ...s }));
+    const used = new Set(
+      starters.flatMap((s) => [s.memberId, s.memberId2]).filter((v): v is number => v != null)
+    );
+    for (const s of starters) {
+      if (s.memberId != null || s.memberId2 !== undefined) continue;
+      const pick = roster
+        .filter((m) => !used.has(m.id) && slotFit(s.slotId, m) <= 2)
+        .sort(
+          (a, b) =>
+            slotFit(s.slotId, a) - slotFit(s.slotId, b) ||
+            (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) ||
+            a.name.localeCompare(b.name, "ko")
+        )[0];
+      if (!pick) continue;
+      s.memberId = pick.id;
+      used.add(pick.id);
+      counts.set(pick.id, (counts.get(pick.id) ?? 0) + 1);
+      filled++;
+    }
+    return { starters, bench: [...byId.keys()].filter((id) => !used.has(id)) };
+  });
+  return { squad: { ...squad, quarters }, filled };
+}
