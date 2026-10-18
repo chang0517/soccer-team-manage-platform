@@ -297,6 +297,37 @@ export function updateTeamLogo(teamId: number, logoUrl: string | null) {
   getDb().prepare("UPDATE teams SET logo_url=? WHERE id=?").run(logoUrl, teamId);
 }
 
+export function renameTeamSlug(teamId: number, newSlug: string) {
+  getDb().prepare("UPDATE teams SET slug=? WHERE id=?").run(newSlug, teamId);
+}
+
+export function deleteTeam(teamId: number) {
+  const tables = [
+    "votes",
+    "records",
+    "mvp_votes",
+    "comments",
+    "historical_stats",
+    "announcements",
+    "hall_of_fame",
+    "opponent_kits",
+    "push_subscriptions",
+    "poll_votes",
+    "poll_options",
+    "polls",
+    "phone_verifications",
+    "tactics_jobs",
+    "users",
+    "events",
+    "members",
+  ];
+  const db = getDb();
+  for (const t of tables) {
+    db.prepare(`DELETE FROM ${t} WHERE team_id=?`).run(teamId);
+  }
+  db.prepare("DELETE FROM teams WHERE id=?").run(teamId);
+}
+
 // ---------- members ----------
 type MemberDbRow = {
   id: number;

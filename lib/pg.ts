@@ -329,6 +329,40 @@ export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
   await pool.query("UPDATE teams SET logo_url=$1 WHERE id=$2", [logoUrl, teamId]);
 }
 
+export async function renameTeamSlug(teamId: number, newSlug: string) {
+  const pool = await ready();
+  await pool.query("UPDATE teams SET slug=$1 WHERE id=$2", [newSlug, teamId]);
+}
+
+// 이관 테스트 도중 생성된 빈 팀을 정리할 때 쓴다. 모든 팀 스코프 테이블에서
+// 해당 team_id의 행을 지운 뒤 teams 행 자체도 지운다.
+export async function deleteTeam(teamId: number) {
+  const pool = await ready();
+  const tables = [
+    "votes",
+    "records",
+    "mvp_votes",
+    "comments",
+    "historical_stats",
+    "announcements",
+    "hall_of_fame",
+    "opponent_kits",
+    "push_subscriptions",
+    "poll_votes",
+    "poll_options",
+    "polls",
+    "phone_verifications",
+    "tactics_jobs",
+    "users",
+    "events",
+    "members",
+  ];
+  for (const t of tables) {
+    await pool.query(`DELETE FROM ${t} WHERE team_id=$1`, [teamId]);
+  }
+  await pool.query("DELETE FROM teams WHERE id=$1", [teamId]);
+}
+
 // ---------- members ----------
 type MemberDbRow = {
   id: number;

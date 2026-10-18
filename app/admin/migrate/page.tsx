@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
+
+interface TeamRow {
+  id: number;
+  slug: string;
+  name: string;
+}
 
 export default function MigrateTeamPage() {
   const { user, loading } = useSession();
@@ -16,6 +22,23 @@ export default function MigrateTeamPage() {
     teamId: number;
     counts: Record<string, number>;
   } | null>(null);
+
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [slugDrafts, setSlugDrafts] = useState<Record<number, string>>({});
+  const [teamBusyId, setTeamBusyId] = useState<number | null>(null);
+  const [teamsError, setTeamsError] = useState("");
+
+  const loadTeams = () =>
+    fetch("/api/admin/teams")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: TeamRow[]) => {
+        setTeams(data);
+        setSlugDrafts(Object.fromEntries(data.map((t) => [t.id, t.slug])));
+      });
+
+  useEffect(() => {
+    if (user?.role === "admin") loadTeams();
+  }, [user]);
 
   if (loading) return null;
   if (!user || user.role !== "admin") {
@@ -54,11 +77,50 @@ export default function MigrateTeamPage() {
       } else {
         setResult(data);
         setSourceUrl("");
+        loadTeams();
       }
     } catch {
       setError("요청에 실패했어요. 네트워크를 확인해 주세요.");
     }
     setRunning(false);
+  };
+
+  const renameTeam = async (teamId: number) => {
+    const newSlug = (slugDrafts[teamId] ?? "").trim().toLowerCase();
+    if (!newSlug) return;
+    setTeamBusyId(teamId);
+    setTeamsError("");
+    const res = await fetch("/api/admin/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, newSlug }),
+    });
+    const data = await res.json();
+    setTeamBusyId(null);
+    if (!res.ok) {
+      setTeamsError(data.error ?? "변경에 실패했어요.");
+      return;
+    }
+    loadTeams();
+  };
+
+  const removeTeam = async (teamId: number, name: string) => {
+    if (!confirm(`"${name}" 팀을 완전히 삭제할까요? 그 팀의 모든 데이터가 사라져요.`))
+      return;
+    setTeamBusyId(teamId);
+    setTeamsError("");
+    const res = await fetch("/api/admin/teams", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId }),
+    });
+    const data = await res.json();
+    setTeamBusyId(null);
+    if (!res.ok) {
+      setTeamsError(data.error ?? "삭제에 실패했어요.");
+      return;
+    }
+    loadTeams();
   };
 
   return (
@@ -148,6 +210,48 @@ export default function MigrateTeamPage() {
           </ul>
         </div>
       )}
+
+      <div className="mt-8 border-t border-zinc-200 pt-6">
+        <h2 className="mb-1 text-base font-bold">팀 목록 / 코드 변경 · 삭제</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          이관 테스트 중 생긴 빈 팀을 정리하거나, slug(팀 코드)를 바꿀 수 있어요.
+        </p>
+        {teamsError && (
+          <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">{teamsError}</p>
+        )}
+        <div className="space-y-2">
+          {teams.map((t) => (
+            <div
+              key={t.id}
+              className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-200 bg-white p-3"
+            >
+              <span className="text-xs text-zinc-400">#{t.id}</span>
+              <span className="font-semibold">{t.name}</span>
+              <input
+                className="w-28 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm"
+                value={slugDrafts[t.id] ?? t.slug}
+                onChange={(e) =>
+                  setSlugDrafts((d) => ({ ...d, [t.id]: e.target.value }))
+                }
+              />
+              <button
+                onClick={() => renameTeam(t.id)}
+                disabled={teamBusyId === t.id || (slugDrafts[t.id] ?? "") === t.slug}
+                className="rounded-lg bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                코드 변경
+              </button>
+              <button
+                onClick={() => removeTeam(t.id, t.name)}
+                disabled={teamBusyId === t.id}
+                className="ml-auto rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-500 disabled:opacity-40"
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </main>
   );
 }

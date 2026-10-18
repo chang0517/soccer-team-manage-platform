@@ -54,6 +54,14 @@ export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
   return usePg ? pg.updateTeamLogo(teamId, logoUrl) : sqlite.updateTeamLogo(teamId, logoUrl);
 }
 
+export async function renameTeamSlug(teamId: number, newSlug: string) {
+  return usePg ? pg.renameTeamSlug(teamId, newSlug) : sqlite.renameTeamSlug(teamId, newSlug);
+}
+
+export async function deleteTeam(teamId: number) {
+  return usePg ? pg.deleteTeam(teamId) : sqlite.deleteTeam(teamId);
+}
+
 export async function listMembers(teamId: number): Promise<Member[]> {
   return usePg ? pg.listMembers(teamId) : sqlite.listMembers(teamId);
 }
