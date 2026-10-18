@@ -142,7 +142,6 @@ export default function AccountPage() {
             <p className="text-sm font-bold">팀 로고</p>
             <p className="mt-0.5 text-xs text-zinc-500">
               올리면 우리 팀원 모두의 화면 상단 아이콘과 브라우저 탭 아이콘이 이 로고로 바뀌어요.
-              안 올리면 앱 기본 로고가 보여요.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -154,12 +153,9 @@ export default function AccountPage() {
                 className="h-14 w-14 rounded-full object-cover ring-1 ring-zinc-200"
               />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- 작은 정적 아이콘
-              <img
-                src="/app-mark.png"
-                alt="기본 로고"
-                className="h-14 w-14 rounded-full object-cover ring-1 ring-zinc-200"
-              />
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-900 text-xl font-extrabold text-white">
+                {user.teamName?.trim().charAt(0) || "T"}
+              </span>
             )}
             <div className="flex flex-col gap-1.5">
               <input
@@ -186,7 +182,7 @@ export default function AccountPage() {
                   disabled={logoSaving}
                   className="text-xs text-zinc-400 underline disabled:opacity-40"
                 >
-                  기본 아이콘으로 되돌리기
+                  올린 로고 지우기
                 </button>
               )}
             </div>

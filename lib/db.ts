@@ -1,3 +1,4 @@
+import { withTeamLogo } from "./teamLogos";
 import * as sqlite from "./sqlite";
 import * as pg from "./pg";
 import type {
@@ -32,16 +33,16 @@ const usePg = !!process.env.DATABASE_URL;
 
 // ---------- teams ----------
 export async function getTeamBySlug(slug: string): Promise<TeamRow | null> {
-  return usePg ? pg.getTeamBySlug(slug) : sqlite.getTeamBySlug(slug);
+  return withTeamLogo(await (usePg ? pg.getTeamBySlug(slug) : sqlite.getTeamBySlug(slug)));
 }
 export async function getTeamById(id: number): Promise<TeamRow | null> {
-  return usePg ? pg.getTeamById(id) : sqlite.getTeamById(id);
+  return withTeamLogo(await (usePg ? pg.getTeamById(id) : sqlite.getTeamById(id)));
 }
 export async function createTeam(t: { slug: string; name: string }): Promise<TeamRow> {
   return usePg ? pg.createTeam(t) : sqlite.createTeam(t);
 }
 export async function listTeams(): Promise<TeamRow[]> {
-  return usePg ? pg.listTeams() : sqlite.listTeams();
+  return (await (usePg ? pg.listTeams() : sqlite.listTeams())).map((t) => withTeamLogo(t));
 }
 export async function updateTeamFineSettings(
   teamId: number,

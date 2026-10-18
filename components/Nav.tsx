@@ -46,8 +46,13 @@ export default function Nav() {
                 alt={user.teamName}
                 className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/20"
               />
+            ) : user ? (
+              // 팀 화면인데 팀 로고가 아직 없으면 팀 이름 첫 글자(앱 로고는 쓰지 않음)
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-extrabold ring-2 ring-white/20">
+                {user.teamName?.trim().charAt(0) || "T"}
+              </span>
             ) : (
-              // 팀 로고를 아직 안 올렸거나 로그인 전이면 앱 로고
+              // 로그인 전(팀이 정해지지 않은 화면)에만 앱 로고
               // eslint-disable-next-line @next/next/no-img-element -- 작은 정적 아이콘
               <img
                 src="/app-mark.png"
