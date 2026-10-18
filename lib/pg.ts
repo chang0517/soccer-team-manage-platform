@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import type {
   AnnouncementCategory,
   AnnouncementRow,
@@ -45,13 +45,18 @@ function getPool(): Pool {
         ? { rejectUnauthorized: false }
         : undefined,
     });
+    // 풀러가 놀고 있는 커넥션을 끊으면 풀이 'error' 이벤트를 내는데, 듣는
+    // 리스너가 없으면 Node 프로세스 전체가 죽어서 그 순간의 요청들이 모두
+    // 500이 된다. 끊긴 커넥션은 풀이 알아서 버리고 새로 맺으니 로그만 남긴다.
+    globalForPg.platformPool.on("error", (err) => {
+      console.error("[pg] idle client error:", err.message);
+    });
   }
   return globalForPg.platformPool;
 }
 
-async function init() {
-  const pool = getPool();
-  await pool.query(`
+async function createTables(client: PoolClient) {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS teams (
       id SERIAL PRIMARY KEY,
       slug TEXT NOT NULL UNIQUE,
@@ -231,37 +236,100 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
-  // historical_stats가 예전에는 멤버당 한 줄(연도 구분 없음)이었다가
-  // 연도별로 여러 줄을 가질 수 있도록 바뀌어서, 이미 만들어진 테이블에는
-  // year 컬럼과 새 복합 기본키를 직접 맞춰준다.
-  await pool.query(
-    "ALTER TABLE historical_stats ADD COLUMN IF NOT EXISTS year INTEGER NOT NULL DEFAULT 0"
+}
+
+const SCORE_COLUMNS: [string, number][] = [
+  ["score_participation", 1.5],
+  ["score_goal", 1.4],
+  ["score_assist", 1.25],
+  ["score_clean_defence", 1.25],
+  ["score_clean_dm", 0.625],
+];
+
+async function historicalPkHasYear(q: Pool | PoolClient): Promise<boolean> {
+  const { rows } = await q.query(
+    `SELECT a.attname FROM pg_index i
+       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+      WHERE i.indrelid = 'historical_stats'::regclass AND i.indisprimary`
   );
-  await pool.query(
-    "ALTER TABLE historical_stats DROP CONSTRAINT IF EXISTS historical_stats_pkey"
+  return rows.some((r) => r.attname === "year");
+}
+
+const TABLES = [
+  "teams", "members", "events", "votes", "records", "mvp_votes", "users",
+  "comments", "historical_stats", "announcements", "hall_of_fame",
+  "opponent_kits", "push_subscriptions", "polls", "poll_options",
+  "poll_votes", "phone_verifications",
+];
+
+// 테이블·컬럼이 이미 지금 스키마대로인지 카탈로그만 읽어서 확인한다.
+// (스키마를 바꿀 땐 여기 확인 조건도 같이 늘려야 실제로 적용된다.)
+async function schemaUpToDate(pool: Pool): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = current_schema()`
   );
-  await pool.query(
-    "ALTER TABLE historical_stats ADD PRIMARY KEY (team_id, member_id, year)"
-  );
-  await pool.query(
-    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_participation DOUBLE PRECISION NOT NULL DEFAULT 1.5"
-  );
-  await pool.query(
-    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_goal DOUBLE PRECISION NOT NULL DEFAULT 1.4"
-  );
-  await pool.query(
-    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_assist DOUBLE PRECISION NOT NULL DEFAULT 1.25"
-  );
-  await pool.query(
-    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_clean_defence DOUBLE PRECISION NOT NULL DEFAULT 1.25"
-  );
-  await pool.query(
-    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_clean_dm DOUBLE PRECISION NOT NULL DEFAULT 0.625"
+  const tables = new Set(rows.map((r) => r.table_name));
+  const cols = new Set(rows.map((r) => `${r.table_name}.${r.column_name}`));
+  return (
+    TABLES.every((t) => tables.has(t)) &&
+    cols.has("historical_stats.year") &&
+    SCORE_COLUMNS.every(([c]) => cols.has(`teams.${c}`)) &&
+    (await historicalPkHasYear(pool))
   );
 }
 
+// 서버리스는 콜드 스타트마다 init()이 돌고 인스턴스 여러 개가 동시에 뜰
+// 수 있다. 예전처럼 매번 무조건 CREATE/ALTER를 날리면 테이블 전체 잠금이
+// 걸려 다른 요청이 줄줄이 대기하고, 동시에 뜬 인스턴스끼리 테이블 생성·
+// 기본키 재생성이 엇갈려 실패한다. 그래서 평소엔 카탈로그만 읽고 끝내고,
+// 바꿀 게 있을 때만 advisory lock으로 한 인스턴스씩 트랜잭션 안에서 적용한다.
+async function init() {
+  const pool = getPool();
+  if (await schemaUpToDate(pool)) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(727201)");
+    await createTables(client);
+    // historical_stats가 예전에는 멤버당 한 줄(연도 구분 없음)이었다가
+    // 연도별로 여러 줄을 가질 수 있도록 바뀌었다.
+    await client.query(
+      "ALTER TABLE historical_stats ADD COLUMN IF NOT EXISTS year INTEGER NOT NULL DEFAULT 0"
+    );
+    // 잠금을 기다리는 동안 다른 인스턴스가 이미 바꿨을 수 있으니 다시 확인한다.
+    if (!(await historicalPkHasYear(client))) {
+      await client.query(
+        "ALTER TABLE historical_stats DROP CONSTRAINT IF EXISTS historical_stats_pkey"
+      );
+      await client.query(
+        "ALTER TABLE historical_stats ADD PRIMARY KEY (team_id, member_id, year)"
+      );
+    }
+    for (const [col, def] of SCORE_COLUMNS) {
+      await client.query(
+        `ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col} DOUBLE PRECISION NOT NULL DEFAULT ${def}`
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 async function ready(): Promise<Pool> {
-  if (!globalForPg.platformPgReady) globalForPg.platformPgReady = init();
+  if (!globalForPg.platformPgReady) {
+    // 실패한 Promise를 그대로 캐시해두면 그 인스턴스는 재시작될 때까지
+    // 모든 요청이 실패한다 — 실패하면 비워서 다음 요청이 다시 시도하게 한다.
+    globalForPg.platformPgReady = init().catch((e) => {
+      globalForPg.platformPgReady = undefined;
+      throw e;
+    });
+  }
   await globalForPg.platformPgReady;
   return getPool();
 }

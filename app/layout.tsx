@@ -13,7 +13,14 @@ const DEFAULT_NAME = "Team Manage";
 // 한 배포를 여러 팀이 같이 쓰기 때문에 "고정된 팀 이름"이라는 게 없다.
 export async function generateMetadata(): Promise<Metadata> {
   const session = await getSessionUser();
-  const team = session ? await getTeamById(session.teamId) : null;
+  // 탭 제목·아이콘은 부가 정보라, DB가 잠깐 응답하지 않는다고 해서 화면
+  // 전체가 "This page couldn't load"로 죽으면 안 된다 — 실패하면 기본값으로.
+  const team = session
+    ? await getTeamById(session.teamId).catch((e) => {
+        console.error("[layout] team lookup failed:", e);
+        return null;
+      })
+    : null;
   const name = team?.name ?? DEFAULT_NAME;
   // 팀 로고가 있으면 브라우저 탭 아이콘도 그걸로 — generateMetadata는
   // 요청마다 다시 실행되니 data: URI를 그대로 넣어도 된다. 다만 홈 화면에
