@@ -41,6 +41,30 @@ function gatewaySecret() {
   }
 }
 
+// fetch는 다른 주소로 리다이렉트될 때 Authorization 헤더를 보안상 떼어버린다.
+// 플랫폼 도메인을 바꾸면서 예전 주소가 새 주소로 넘겨지게 되면 시크릿이 빈
+// 값으로 도착해서 401이 난다 — 그래서 리다이렉트를 직접 따라가며 헤더를 유지한다.
+async function postJson(target, headers, body) {
+  let url = target;
+  for (let hop = 0; hop < 5; hop++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(15000),
+    });
+    if ([301, 302, 303, 307, 308].includes(res.status)) {
+      const loc = res.headers.get("location");
+      if (!loc) throw new Error(`HTTP ${res.status} (Location 없음)`);
+      url = new URL(loc, url).toString();
+      continue;
+    }
+    return { res, finalUrl: url };
+  }
+  throw new Error("리다이렉트가 너무 많아요");
+}
+
 async function registerWithPlatforms(url) {
   const secret = gatewaySecret();
   if (!secret) {
@@ -51,12 +75,14 @@ async function registerWithPlatforms(url) {
     const prev = registered.get(target);
     if (prev && prev.url === url && Date.now() - prev.at < REREGISTER_MS) continue;
     try {
-      const res = await fetch(target, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
-        body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(15000),
-      });
+      const { res, finalUrl } = await postJson(
+        target,
+        { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
+        JSON.stringify({ url })
+      );
+      if (finalUrl !== target && !prev) {
+        log(`등록 주소가 리다이렉트됨: ${target} → ${finalUrl} (GATEWAY_REGISTER_URLS를 새 주소로 바꾸면 더 깔끔해요)`);
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text().catch(() => "")}`);
       registered.set(target, { url, at: Date.now() });
       if (!prev || prev.url !== url) log(`플랫폼에 게이트웨이 주소 등록: ${target}`);
