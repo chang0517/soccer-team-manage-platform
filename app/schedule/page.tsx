@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import CalendarSubscribe from "@/components/CalendarSubscribe";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import MonthCalendar from "@/components/MonthCalendar";
@@ -127,18 +128,21 @@ export default function SchedulePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-[22px] font-extrabold tracking-tight">일정</h1>
-        {isAdmin && (
-          <button
-            onClick={() => setShowForm((v) => !v)}
-            className={`rounded-full px-4 py-2 text-sm font-bold shadow-md ${
-              showForm
-                ? "bg-zinc-200 text-zinc-700 shadow-transparent"
-                : "bg-blue-700 text-white shadow-blue-700/20"
-            }`}
-          >
-            {showForm ? "닫기" : "+ 일정 추가"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {user && <CalendarSubscribe />}
+          {isAdmin && (
+            <button
+              onClick={() => setShowForm((v) => !v)}
+              className={`rounded-full px-4 py-2 text-sm font-bold shadow-md ${
+                showForm
+                  ? "bg-zinc-200 text-zinc-700 shadow-transparent"
+                  : "bg-blue-700 text-white shadow-blue-700/20"
+              }`}
+            >
+              {showForm ? "닫기" : "+ 일정 추가"}
+            </button>
+          )}
+        </div>
       </div>
 
       <AnimatePresence initial={false}>

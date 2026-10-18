@@ -36,6 +36,15 @@ const usePg = !!process.env.DATABASE_URL;
 export async function getTeamBySlug(slug: string): Promise<TeamRow | null> {
   return withTeamLogo(await (usePg ? pg.getTeamBySlug(slug) : sqlite.getTeamBySlug(slug)));
 }
+export async function getCalendarToken(teamId: number): Promise<string> {
+  const { randomBytes } = await import("node:crypto");
+  const fresh = randomBytes(18).toString("base64url");
+  return usePg ? pg.ensureCalendarToken(teamId, fresh) : sqlite.ensureCalendarToken(teamId, fresh);
+}
+export async function getTeamIdByCalendarToken(token: string): Promise<number | null> {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  return usePg ? pg.getTeamIdByCalendarToken(token) : sqlite.getTeamIdByCalendarToken(token);
+}
 export async function getTeamById(id: number): Promise<TeamRow | null> {
   return withTeamLogo(await (usePg ? pg.getTeamById(id) : sqlite.getTeamById(id)));
 }

@@ -71,6 +71,7 @@ async function createTables(client: PoolClient) {
       score_assist DOUBLE PRECISION NOT NULL DEFAULT 1.25,
       score_clean_defence DOUBLE PRECISION NOT NULL DEFAULT 1.25,
       score_clean_dm DOUBLE PRECISION NOT NULL DEFAULT 0.625,
+      calendar_token TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS members (
@@ -272,6 +273,7 @@ const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
   ["teams", "score_clean_defence", "DOUBLE PRECISION NOT NULL DEFAULT 1.25"],
   ["teams", "score_clean_dm", "DOUBLE PRECISION NOT NULL DEFAULT 0.625"],
   ["events", "mvp_open_notified", "BOOLEAN NOT NULL DEFAULT false"],
+  ["teams", "calendar_token", "TEXT"],
   ["events", "mvp_result_notified", "BOOLEAN NOT NULL DEFAULT false"],
 ];
 
@@ -400,6 +402,21 @@ export async function getTeamBySlug(slug: string): Promise<TeamRow | null> {
   const pool = await ready();
   const { rows } = await pool.query("SELECT * FROM teams WHERE slug=$1", [slug]);
   return rows[0] ? toTeam(rows[0]) : null;
+}
+
+// 팀마다 다른 캘린더 구독 토큰. 처음 요청될 때 만들어 저장한다(동시에 두
+// 요청이 와도 먼저 저장된 값을 쓴다).
+export async function ensureCalendarToken(teamId: number, fresh: string): Promise<string> {
+  const pool = await ready();
+  await pool.query("UPDATE teams SET calendar_token=$1 WHERE id=$2 AND calendar_token IS NULL", [fresh, teamId]);
+  const { rows } = await pool.query("SELECT calendar_token FROM teams WHERE id=$1", [teamId]);
+  return rows[0].calendar_token;
+}
+
+export async function getTeamIdByCalendarToken(token: string): Promise<number | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT id FROM teams WHERE calendar_token=$1", [token]);
+  return rows[0]?.id ?? null;
 }
 
 export async function getTeamById(id: number): Promise<TeamRow | null> {

@@ -31,7 +31,7 @@ function addDays(date: string, days: number): string {
  * 피드로 변환한다. 시작 시각이 있는 일정은 시작 + MATCH_DURATION_HOURS를
  * 종료로 잡고, 시각이 비어있으면(친선 모임 등) 하루짜리 종일 일정으로 만든다.
  */
-export function eventsToIcs(events: EventItem[]): string {
+export function eventsToIcs(events: EventItem[], teamName = "팀"): string {
   const now = toIcsUtc(
     new Date().toISOString().slice(0, 10),
     new Date().toISOString().slice(11, 16)
@@ -39,17 +39,17 @@ export function eventsToIcs(events: EventItem[]): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Raven FC//events//KO",
+    "PRODID:-//Team Manager//events//KO",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:Raven FC 일정",
+    `X-WR-CALNAME:${escapeText(teamName)} 일정`,
     "X-WR-TIMEZONE:Asia/Seoul",
   ];
 
   for (const ev of events) {
     const summary = ev.opponent ? `${ev.title} vs ${ev.opponent}` : ev.title;
     lines.push("BEGIN:VEVENT");
-    lines.push(`UID:ravenfc-event-${ev.id}@raven-fc`);
+    lines.push(`UID:event-${ev.id}@team-manager`);
     lines.push(`DTSTAMP:${now}`);
     if (ev.time) {
       lines.push(`DTSTART:${toIcsUtc(ev.date, ev.time)}`);
@@ -72,12 +72,12 @@ export function eventsToIcs(events: EventItem[]): string {
   return lines.join("\r\n");
 }
 
-export function icsFeedResponse(events: EventItem[]): Response {
-  const body = eventsToIcs(events);
+export function icsFeedResponse(events: EventItem[], teamName?: string): Response {
+  const body = eventsToIcs(events, teamName);
   return new Response(body, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": 'inline; filename="raven-fc.ics"',
+      "Content-Disposition": 'inline; filename="team-schedule.ics"',
       "Content-Length": String(Buffer.byteLength(body, "utf8")),
       "Cache-Control": "no-store",
     },

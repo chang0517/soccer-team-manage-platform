@@ -50,6 +50,7 @@ function createDb(): Database.Database {
       score_assist REAL NOT NULL DEFAULT 1.25,
       score_clean_defence REAL NOT NULL DEFAULT 1.25,
       score_clean_dm REAL NOT NULL DEFAULT 0.625,
+      calendar_token TEXT,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS members (
@@ -279,6 +280,19 @@ function toTeam(r: TeamDbRow): TeamRow {
     },
     createdAt: r.created_at,
   };
+}
+
+export function ensureCalendarToken(teamId: number, fresh: string): string {
+  const db = getDb();
+  db.prepare("UPDATE teams SET calendar_token=? WHERE id=? AND calendar_token IS NULL").run(fresh, teamId);
+  return (db.prepare("SELECT calendar_token FROM teams WHERE id=?").get(teamId) as { calendar_token: string }).calendar_token;
+}
+
+export function getTeamIdByCalendarToken(token: string): number | null {
+  const row = getDb().prepare("SELECT id FROM teams WHERE calendar_token=?").get(token) as
+    | { id: number }
+    | undefined;
+  return row?.id ?? null;
 }
 
 export function getTeamBySlug(slug: string): TeamRow | null {

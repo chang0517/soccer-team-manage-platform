@@ -18,5 +18,5 @@ export async function GET(request: Request) {
   const team = await getTeamBySlug(teamSlug);
   if (!team) return Response.json({ error: "권한이 없어요." }, { status: 403 });
 
-  return icsFeedResponse(await listEvents(team.id));
+  return icsFeedResponse(await listEvents(team.id), team.name);
 }
