@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { SessionUser } from "@/lib/types";
+import type { ScoreRules, SessionUser } from "@/lib/types";
 
-type MeUser = SessionUser & { teamName: string; teamLogoUrl: string | null };
+type MeUser = SessionUser & {
+  teamName: string;
+  teamLogoUrl: string | null;
+  teamScoreRules?: ScoreRules;
+};
 
 export function useSession() {
   const [user, setUser] = useState<MeUser | null>(null);

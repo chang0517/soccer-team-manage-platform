@@ -1,5 +1,6 @@
 "use client";
 
+import AuthHeader from "@/components/ui/AuthHeader";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
@@ -70,13 +71,13 @@ export default function SignupPage() {
   };
 
   const input =
-    "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   if (pendingMsg) {
     return (
-      <div className="mx-auto max-w-sm space-y-4 pt-10 text-center">
-        <h1 className="text-lg font-bold">가입 신청 완료</h1>
-        <p className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+      <div className="mx-auto max-w-sm space-y-5 pt-6 text-center">
+        <AuthHeader icon="🎉" title="가입 신청 완료" />
+        <p className="card p-4 text-sm text-zinc-600">
           {pendingMsg}
         </p>
         <Link href="/login" className="font-semibold text-blue-700">
@@ -87,9 +88,9 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm space-y-4 pt-10">
-      <h1 className="text-center text-lg font-bold">가입하기</h1>
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="mx-auto max-w-sm space-y-5 pt-6">
+      <AuthHeader title="가입하기" />
+      <div className="space-y-3 card p-4">
         <div>
           <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
           <input
@@ -185,7 +186,7 @@ export default function SignupPage() {
             password.length < 4 ||
             !displayName.trim()
           }
-          className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+          className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
         >
           {loading ? "가입 중…" : "가입 신청"}
         </button>

@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
@@ -16,7 +18,7 @@ interface ApprovalDraft {
   role: "admin" | "player";
 }
 
-const selectClass = "rounded-xl border border-zinc-300 bg-white px-2 py-1.5 text-sm";
+const selectClass = "rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm";
 
 // 대기 유저가 가입 때 스스로 입력한 값으로 초기 draft를 채운다(없으면
 // 예전 방식대로 기본값). 운영진은 승인 전에 이 값을 그대로 두거나 바꿀 수 있다.
@@ -53,7 +55,7 @@ function ApprovalCard({
   onReject?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="card p-4">
       <p className="font-bold">
         {u.displayName}{" "}
         <span className="font-normal text-zinc-400">@{u.username}</span>
@@ -269,14 +271,15 @@ export default function AdminPage() {
     setBusyId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error ?? "승인에 실패했어요. 다시 시도해 주세요.");
+      toast.error(data?.error ?? "승인에 실패했어요. 다시 시도해 주세요.");
       return;
     }
+    toast.success(`${u.displayName} 님을 승인했어요`);
     load();
   };
 
   const reject = async (u: AppUser) => {
-    if (!confirm(`${u.displayName}(${u.username}) 가입을 거절할까요?`)) return;
+    if (!(await confirmSheet({ title: `${u.displayName}(${u.username}) 가입을 거절할까요?`, destructive: true, confirmText: "거절" }))) return;
     setBusyId(u.id);
     const res = await fetch(`/api/admin/users/${u.id}`, {
       method: "POST",
@@ -286,41 +289,47 @@ export default function AdminPage() {
     setBusyId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error ?? "거절 처리에 실패했어요. 다시 시도해 주세요.");
+      toast.error(data?.error ?? "거절 처리에 실패했어요. 다시 시도해 주세요.");
       return;
     }
+    toast.success("가입을 거절했어요");
     load();
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">운영진 · 가입 승인</h1>
-        <div className="flex flex-col items-end gap-1 text-sm">
-          <Link href="/members" className="font-semibold text-blue-700">
-            선수 명단 관리 →
+      <h1 className="px-1 text-[22px] font-extrabold tracking-tight">운영진</h1>
+      <div className="stagger grid grid-cols-2 gap-2.5">
+        {[
+          { href: "/members", icon: "👥", label: "선수 명단 관리" },
+          { href: "/admin/members/import", icon: "📥", label: "멤버 일괄 등록" },
+          { href: "/admin/settings", icon: "⚙️", label: "팀 설정", sub: "벌금 · 점수 배율" },
+          { href: "/admin/fines", icon: "💸", label: "미투표자 확인", sub: "이번 달 벌금 대상" },
+          { href: "/admin/historical-stats", icon: "📚", label: "역대 기록 관리" },
+        ].map((m) => (
+          <Link
+            key={m.href}
+            href={m.href}
+            className="pressable card flex items-center gap-3 p-3.5 hover:bg-zinc-50"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-xl">
+              {m.icon}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-extrabold">{m.label}</span>
+              {m.sub && <span className="block text-[11px] text-zinc-400">{m.sub}</span>}
+            </span>
           </Link>
-          <Link href="/admin/members/import" className="font-semibold text-blue-700">
-            멤버 일괄 등록 →
-          </Link>
-          <Link href="/admin/settings" className="font-semibold text-blue-700">
-            팀 설정(벌금·점수 배율) →
-          </Link>
-          <Link href="/admin/fines" className="font-semibold text-blue-700">
-            이번 달 미투표자 →
-          </Link>
-          <Link href="/admin/historical-stats" className="font-semibold text-blue-700">
-            역대 기록 관리 →
-          </Link>
-        </div>
+        ))}
       </div>
-      <p className="text-sm text-zinc-500">
+      <h2 className="px-1 pt-2 text-lg font-extrabold tracking-tight">가입 승인</h2>
+      <p className="px-1 text-sm text-zinc-500">
         가입 신청자가 실제 팀원인지 이름을 보고 확인한 다음, 기존 멤버와
         연결하거나 새 멤버로 등록해 승인하세요.
       </p>
 
       {unlinked.length > 0 && (
-        <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="space-y-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-4">
           <div>
             <p className="text-sm font-bold text-amber-800">
               멤버 연결이 안 된 승인 계정 ({unlinked.length}명)
@@ -348,7 +357,7 @@ export default function AdminPage() {
       )}
 
       {pending.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400">
+        <p className="card p-8 text-center text-sm text-zinc-400">
           승인 대기 중인 가입 신청이 없어요.
         </p>
       )}

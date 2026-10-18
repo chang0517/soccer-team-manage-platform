@@ -85,7 +85,7 @@ export default function AccountPage() {
   };
 
   const input =
-    "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   const submit = async () => {
     if (!currentPassword || newPassword.length < 4) return;
@@ -123,12 +123,12 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-sm space-y-4 pt-10">
-      <h1 className="text-center text-lg font-bold">계정 설정</h1>
+      <h1 className="text-center text-2xl font-extrabold tracking-tight">계정 설정</h1>
       <p className="text-center text-sm text-zinc-500">
         {user.displayName}님 ({user.username})
       </p>
       {user.role === "admin" && (
-        <div className="space-y-2 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+        <div className="space-y-2 rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-4">
           <p className="text-sm font-bold text-blue-900">운영진</p>
           <Link href="/admin" className="block text-sm font-semibold text-blue-700">
             가입 승인 관리 →
@@ -137,7 +137,7 @@ export default function AccountPage() {
       )}
 
       {user.role === "admin" && (
-        <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="space-y-3 card p-4">
           <p className="text-sm font-bold">팀 로고</p>
           <div className="flex items-center gap-3">
             {user.teamLogoUrl ? (
@@ -186,7 +186,7 @@ export default function AccountPage() {
         </div>
       )}
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-3 card p-4">
         <div>
           <label className="text-xs font-semibold text-zinc-500">현재 비밀번호</label>
           <input
@@ -211,7 +211,7 @@ export default function AccountPage() {
         <button
           onClick={submit}
           disabled={loading || !currentPassword || newPassword.length < 4}
-          className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+          className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
         >
           {loading ? "변경 중…" : "비밀번호 변경"}
         </button>

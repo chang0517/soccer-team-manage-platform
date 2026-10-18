@@ -100,9 +100,9 @@ export default function AiRecordImport({
   };
 
   const input =
-    "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm resize-none";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm resize-none";
   const scoreInput =
-    "w-16 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-sm";
+    "w-16 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-center text-sm";
 
   return (
     <div className="mt-4 border-t border-zinc-100 pt-3">
@@ -130,14 +130,14 @@ export default function AiRecordImport({
           <button
             onClick={analyze}
             disabled={loading || !notes.trim()}
-            className="w-full rounded-xl bg-blue-700 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-2xl bg-blue-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
           >
             {loading ? "분석 중…" : "분석하기"}
           </button>
           {error && <p className="text-xs text-red-500">{error}</p>}
 
           {(preview.length > 0 || scoreGuess) && (
-            <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3">
+            <div className="space-y-3 rounded-2xl bg-zinc-50 p-3">
               {scoreGuess && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-100 pb-3">
                   <span className="text-xs font-semibold text-zinc-500">
@@ -193,7 +193,7 @@ export default function AiRecordImport({
                         &ldquo;{p.token}&rdquo;
                       </span>
                       <select
-                        className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                        className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                         value={p.selectedId ?? ""}
                         onChange={(e) =>
                           setPreview((ps) =>
@@ -228,7 +228,7 @@ export default function AiRecordImport({
 
               <button
                 onClick={apply}
-                className="w-full rounded-xl bg-blue-700 py-2 text-sm font-semibold text-white"
+                className="w-full rounded-2xl bg-blue-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-700/20"
               >
                 아래 기록 초안에 반영
               </button>

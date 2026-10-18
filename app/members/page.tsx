@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/useSession";
 import { POS_GROUPS, POS_LABELS } from "@/lib/types";
 import type { Member, PosGroup } from "@/lib/types";
@@ -27,19 +30,26 @@ export default function MembersPage() {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
   const [members, setMembers] = useState<Member[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY);
 
   const load = () =>
-    fetch("/api/members").then((r) => r.json()).then(setMembers);
+    fetch("/api/members")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Member[]) => {
+        setMembers(rows);
+        setLoaded(true);
+      });
   useEffect(() => {
     load();
   }, []);
 
   const add = async () => {
     if (!draft.name.trim()) return;
-    await fetch("/api/members", {
+    const res = await fetch("/api/members", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -51,12 +61,17 @@ export default function MembersPage() {
         phone: draft.phone,
       }),
     });
+    if (!res.ok) {
+      toast.error("멤버 추가에 실패했어요");
+      return;
+    }
+    toast.success(`${draft.name} 님을 추가했어요`);
     setDraft(EMPTY);
     load();
   };
 
   const saveEdit = async (id: number) => {
-    await fetch(`/api/members/${id}`, {
+    const res = await fetch(`/api/members/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -68,18 +83,30 @@ export default function MembersPage() {
         phone: editDraft.phone,
       }),
     });
+    if (!res.ok) {
+      toast.error("저장에 실패했어요");
+      return;
+    }
     setEditingId(null);
+    toast.success("저장했어요");
     load();
   };
 
   const remove = async (m: Member) => {
-    if (!confirm(`${m.name} 님을 삭제할까요? 투표·기록도 함께 삭제돼요.`)) return;
-    await fetch(`/api/members/${m.id}`, { method: "DELETE" });
+    if (!(await confirmSheet({ title: `${m.name} 님을 삭제할까요? 투표·기록도 함께 삭제돼요.`, destructive: true, confirmText: "삭제" }))) return;
+    const res = await fetch(`/api/members/${m.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("삭제에 실패했어요");
+      return;
+    }
+    toast.success(`${m.name} 님을 삭제했어요`);
     load();
   };
 
   const input =
-    "rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+    "rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm";
+  const q = query.trim();
+  const shown = q ? members.filter((m) => m.name.includes(q) || String(m.backNo ?? "") === q) : members;
   const posSelect = (
     value: PosGroup,
     onChange: (v: PosGroup) => void
@@ -100,12 +127,12 @@ export default function MembersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-lg font-bold">멤버</h1>
-        <span className="text-sm text-zinc-500">총 {members.length}명</span>
+        <h1 className="text-[22px] font-extrabold tracking-tight">멤버</h1>
+        <span className="rounded-full bg-zinc-200/70 px-2.5 py-0.5 text-xs font-bold text-zinc-600">총 {members.length}명</span>
       </div>
 
       {isAdmin && (
-      <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+      <div className="space-y-3 rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-4">
         <p className="text-sm font-bold">멤버 추가</p>
         <div className="grid grid-cols-2 gap-2">
           <input
@@ -153,15 +180,32 @@ export default function MembersPage() {
         <button
           onClick={add}
           disabled={!draft.name.trim()}
-          className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+          className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
         >
           추가
         </button>
       </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-        {members.map((m) => (
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">🔍</span>
+        <input
+          className="w-full rounded-2xl border border-zinc-200 bg-white py-3 pl-10 pr-4 text-sm"
+          placeholder="이름 또는 등번호로 찾기"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {!loaded && <ListSkeleton rows={4} />}
+      {loaded && shown.length === 0 && (
+        <p className="card p-8 text-center text-sm text-zinc-400">
+          {q ? `"${q}"에 해당하는 멤버가 없어요.` : "아직 등록된 멤버가 없어요."}
+        </p>
+      )}
+
+      <div className="stagger card overflow-hidden">
+        {shown.map((m) => (
           <div key={m.id} className="border-b border-zinc-100 last:border-0">
             {editingId === m.id ? (
               <div className="space-y-2 bg-zinc-50 p-4">
@@ -212,13 +256,13 @@ export default function MembersPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => saveEdit(m.id)}
-                    className="flex-1 rounded-xl bg-blue-700 py-2 text-sm font-semibold text-white"
+                    className="flex-1 rounded-2xl bg-blue-700 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-700/20"
                   >
                     저장
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
-                    className="flex-1 rounded-xl border border-zinc-300 py-2 text-sm"
+                    className="flex-1 rounded-2xl bg-zinc-100 py-2.5 text-sm font-semibold text-zinc-700"
                   >
                     취소
                   </button>
@@ -226,11 +270,11 @@ export default function MembersPage() {
               </div>
             ) : (
               <div className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-800">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-extrabold text-white shadow-sm">
                   {m.backNo ?? "–"}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">
+                  <p className="font-bold">
                     {m.name}
                     {m.isGuest && (
                       <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
@@ -258,7 +302,7 @@ export default function MembersPage() {
                         phone: m.phone ?? "",
                       });
                     }}
-                    className="text-xs text-blue-700 underline"
+                    className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
                   >
                     수정
                   </button>
@@ -266,7 +310,7 @@ export default function MembersPage() {
                 {isAdmin && (
                   <button
                     onClick={() => remove(m)}
-                    className="text-xs text-red-500 underline"
+                    className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-100"
                   >
                     삭제
                   </button>

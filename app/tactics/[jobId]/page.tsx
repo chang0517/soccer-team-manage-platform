@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { toast } from "sonner";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,13 +37,13 @@ export default function TacticsViewPage({
   }, [jobId, user]);
 
   const remove = async () => {
-    if (!confirm("이 전술을 삭제할까요?")) return;
+    if (!(await confirmSheet({ title: "이 전술을 삭제할까요?", destructive: true, confirmText: "삭제" }))) return;
     setDeleting(true);
     const res = await fetch(`/api/tactics/${jobId}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
       setDeleting(false);
-      alert(data.error ?? "삭제에 실패했어요.");
+      toast.error(data.error ?? "삭제에 실패했어요.");
       return;
     }
     router.push("/tactics");
@@ -70,7 +72,7 @@ export default function TacticsViewPage({
       )}
 
       {scene && (
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="mt-4 card p-4">
           <TacticsBoard scene={scene} />
           {createdAt && (
             <p className="mt-3 text-center text-xs text-zinc-400">

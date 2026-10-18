@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
@@ -68,7 +70,7 @@ export default function HistoricalStatsAdminPage() {
     );
   }
 
-  const input = "w-16 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-sm text-right";
+  const input = "w-16 rounded-xl border border-zinc-200 bg-white px-1.5 py-1 text-sm text-right";
   const memberById = new Map(members.map((m) => [m.id, m]));
 
   const setDraft = (k: string, patch: Partial<Draft>) =>
@@ -88,7 +90,7 @@ export default function HistoricalStatsAdminPage() {
   };
 
   const remove = async (memberId: number, year: number, name: string) => {
-    if (!confirm(`${name}의 ${year} 시즌 기록을 삭제할까요?`)) return;
+    if (!(await confirmSheet({ title: `${name}의 ${year} 시즌 기록을 삭제할까요?`, destructive: true, confirmText: "삭제" }))) return;
     const k = key(memberId, year);
     setSavingKey(k);
     await fetch("/api/admin/historical-stats", {
@@ -105,7 +107,7 @@ export default function HistoricalStatsAdminPage() {
     const year = Number(newYear);
     if (!memberId || !year) return;
     if (stats.some((s) => s.memberId === memberId && s.year === year)) {
-      alert("이미 해당 멤버·시즌 항목이 있어요. 아래 목록에서 수정해 주세요.");
+      toast.error("이미 해당 멤버·시즌 항목이 있어요. 아래 목록에서 수정해 주세요.");
       return;
     }
     await save(memberId, year);
@@ -123,15 +125,15 @@ export default function HistoricalStatsAdminPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold">역대 누적 기록(랭킹) 관리</h1>
+      <h1 className="text-[22px] font-extrabold tracking-tight">역대 누적 기록(랭킹) 관리</h1>
       <p className="text-sm text-zinc-500">
         앱 도입 이전 시즌별 누적 기록을 멤버·시즌 단위로 추가·수정할 수 있어요.
         여기서 입력한 값은 해당 시즌과 &quot;전체&quot; 랭킹에 기준치로 더해져요.
       </p>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50/50 p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-3">
         <select
-          className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
           value={newMemberId}
           onChange={(e) => setNewMemberId(e.target.value)}
         >
@@ -145,7 +147,7 @@ export default function HistoricalStatsAdminPage() {
             ))}
         </select>
         <input
-          className="w-20 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          className="w-20 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
           value={newYear}
           onChange={(e) => setNewYear(e.target.value)}
           placeholder="시즌(연도)"
@@ -159,7 +161,7 @@ export default function HistoricalStatsAdminPage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+      <div className="overflow-x-auto card">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">

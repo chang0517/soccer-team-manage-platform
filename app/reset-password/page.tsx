@@ -1,5 +1,6 @@
 "use client";
 
+import AuthHeader from "@/components/ui/AuthHeader";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
@@ -19,7 +20,7 @@ export default function ResetPasswordPage() {
   }, []);
 
   const input =
-    "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   const requestCode = async () => {
     if (!teamSlug.trim() || !username.trim()) return;
@@ -65,9 +66,9 @@ export default function ResetPasswordPage() {
 
   if (step === "result") {
     return (
-      <div className="mx-auto max-w-sm space-y-4 pt-10 text-center">
-        <h1 className="text-lg font-bold">임시 비밀번호 발급 완료</h1>
-        <div className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="mx-auto max-w-sm space-y-5 pt-6 text-center">
+        <AuthHeader icon="🎉" title="임시 비밀번호 발급 완료" />
+        <div className="space-y-2 card p-4">
           <p className="text-2xl font-bold tracking-wider text-blue-700">
             {tempPassword}
           </p>
@@ -83,9 +84,9 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm space-y-4 pt-10">
-      <h1 className="text-center text-lg font-bold">비밀번호 찾기</h1>
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="mx-auto max-w-sm space-y-5 pt-6">
+      <AuthHeader title="비밀번호 찾기" />
+      <div className="space-y-3 card p-4">
         <div>
           <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
           <input
@@ -109,7 +110,7 @@ export default function ResetPasswordPage() {
           <button
             onClick={requestCode}
             disabled={loading || !teamSlug.trim() || !username.trim()}
-            className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
           >
             {loading ? "발송 중…" : "인증번호 받기"}
           </button>
@@ -135,7 +136,7 @@ export default function ResetPasswordPage() {
             <button
               onClick={verifyCode}
               disabled={loading || !code.trim()}
-              className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+              className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
             >
               {loading ? "확인 중…" : "확인"}
             </button>

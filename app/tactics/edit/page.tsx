@@ -260,7 +260,7 @@ export default function TacticsEditPage() {
     );
   }
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   return (
     <main className="mx-auto max-w-3xl px-4 pb-24 pt-6 md:pb-10">
@@ -298,7 +298,7 @@ export default function TacticsEditPage() {
         </button>
       </details>
 
-      <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-4 card p-4">
         <div>
           <label className="text-xs font-semibold text-zinc-500">제목</label>
           <input
@@ -333,7 +333,7 @@ export default function TacticsEditPage() {
             {players.map((p) => (
               <div key={p.id} className="flex items-center gap-2">
                 <select
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                   value={p.team}
                   onChange={(e) =>
                     setPlayers((prev) =>
@@ -347,7 +347,7 @@ export default function TacticsEditPage() {
                   <option value="B">B(상대)</option>
                 </select>
                 <input
-                  className="flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                   value={p.label}
                   onChange={(e) =>
                     setPlayers((prev) =>
@@ -445,7 +445,7 @@ export default function TacticsEditPage() {
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="mt-6 card p-4">
         <p className="mb-2 text-sm font-bold text-zinc-500">미리보기</p>
         <TacticsBoard scene={previewScene} />
       </div>
@@ -456,7 +456,7 @@ export default function TacticsEditPage() {
       <button
         onClick={save}
         disabled={saving || !title.trim()}
-        className="mt-4 w-full rounded-xl bg-blue-700 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+        className="mt-4 w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
       >
         {saving ? "저장 중…" : "저장하고 전술 시뮬레이터에서 보기"}
       </button>
@@ -624,7 +624,7 @@ function ArrowBuilder({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+        className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
         value={fromId}
         onChange={(e) => setFrom(e.target.value)}
       >
@@ -636,7 +636,7 @@ function ArrowBuilder({
       </select>
       <span className="text-xs text-zinc-400">→</span>
       <select
-        className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+        className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
         value={toZone}
         onChange={(e) => setToZone(e.target.value)}
       >

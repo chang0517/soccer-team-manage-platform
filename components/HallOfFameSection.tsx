@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
 import { useEffect, useState } from "react";
 import { useSession } from "@/components/useSession";
 import type { HallOfFameRow, Member } from "@/lib/types";
@@ -166,12 +167,12 @@ export default function HallOfFameSection() {
   };
 
   const remove = async (id: number) => {
-    if (!confirm("이 연도 기록을 삭제할까요?")) return;
+    if (!(await confirmSheet({ title: "이 연도 기록을 삭제할까요?", destructive: true, confirmText: "삭제" }))) return;
     await fetch(`/api/hall-of-fame/${id}`, { method: "DELETE" });
     load();
   };
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   return (
     <div className="space-y-5">
@@ -208,7 +209,7 @@ export default function HallOfFameSection() {
       </div>
 
       {showForm && (
-        <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+        <div className="space-y-3 rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-4">
           <label className="block text-xs font-semibold text-zinc-500">
             연도
             <input
@@ -242,7 +243,7 @@ export default function HallOfFameSection() {
           <button
             onClick={submit}
             disabled={saving || !form.year.trim()}
-            className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
           >
             {saving ? "저장 중…" : "저장"}
           </button>
@@ -250,7 +251,7 @@ export default function HallOfFameSection() {
       )}
 
       {rows.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-400">
+        <p className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-8 text-center text-sm text-zinc-400">
           아직 등록된 명예의 전당 기록이 없어요.
         </p>
       )}
@@ -259,7 +260,7 @@ export default function HallOfFameSection() {
         {rows.map((row) => (
           <div
             key={row.id}
-            className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
+            className="overflow-hidden card shadow-sm"
           >
             <div className="flex items-center justify-between bg-gradient-to-r from-blue-800 to-blue-700 px-4 py-3">
               <h2 className="flex items-center gap-2 text-lg font-extrabold text-white">

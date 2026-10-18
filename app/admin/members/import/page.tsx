@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
@@ -100,7 +101,7 @@ export default function ImportMembersPage() {
     const validRows = rows.filter((r) => r.name.trim());
     if (validRows.length === 0) return;
     if (
-      !confirm(`${validRows.length}명을 등록할까요? 포지션이 비어있으면 CB/WB로 자동 설정돼요.`)
+      !(await confirmSheet(`${validRows.length}명을 등록할까요? 포지션이 비어있으면 CB/WB로 자동 설정돼요.`))
     )
       return;
     setSubmitting(true);
@@ -141,7 +142,7 @@ export default function ImportMembersPage() {
       <Link href="/admin" className="text-sm font-semibold text-blue-700">
         ← 운영진 메뉴
       </Link>
-      <h1 className="text-lg font-bold">멤버 명단 일괄 등록</h1>
+      <h1 className="text-[22px] font-extrabold tracking-tight">멤버 명단 일괄 등록</h1>
       <p className="text-sm text-zinc-500">
         양식(CSV)을 받아서 멤버 명단을 채운 다음 업로드하면 한 번에 등록돼요.
         포지션은 <code className="rounded bg-zinc-100 px-1">GK·CB·WB·DM·AM·WG·ST</code>{" "}
@@ -151,12 +152,12 @@ export default function ImportMembersPage() {
       <a
         href="/templates/member-roster-template.csv"
         download
-        className="inline-block rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white"
+        className="inline-block rounded-full bg-blue-700 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-700/20"
       >
         ⬇️ 양식 다운로드
       </a>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="card p-4">
         <label className="block text-xs font-semibold text-zinc-500">
           작성한 CSV 파일 업로드
           <input
@@ -178,7 +179,7 @@ export default function ImportMembersPage() {
       )}
 
       {rows.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="card p-4">
           <p className="mb-2 text-sm font-semibold">
             미리보기 — {rows.filter((r) => r.name.trim()).length}명
           </p>
@@ -229,7 +230,7 @@ export default function ImportMembersPage() {
           <button
             onClick={submit}
             disabled={submitting}
-            className="mt-3 w-full rounded-xl bg-blue-700 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+            className="mt-3 w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
           >
             {submitting ? "등록 중…" : "일괄 등록"}
           </button>

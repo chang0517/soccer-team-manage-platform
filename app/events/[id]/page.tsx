@@ -1,6 +1,9 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import type { DragEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -180,7 +183,7 @@ export default function EventDetailPage({
     loadWeather();
   }, [loadWeather]);
 
-  if (!event) return <p className="py-10 text-center text-zinc-400">불러오는 중…</p>;
+  if (!event) return <PageSkeleton />;
 
   const attendIds = votes.filter((v) => v.status === "attend").map((v) => v.memberId);
   const amAttendee = myId != null && attendIds.includes(myId);
@@ -338,8 +341,14 @@ export default function EventDetailPage({
     return lines;
   })();
 
+  // 낙관적 업데이트: 누르는 즉시 반영하고, 서버가 거절하면 되돌린다.
   const vote = async (status: VoteStatus) => {
     if (!myId) return;
+    const prev = votes;
+    setVotes([
+      ...prev.filter((v) => v.memberId !== myId),
+      { eventId: Number(id), memberId: myId, status },
+    ]);
     const res = await fetch(`/api/events/${id}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -347,10 +356,13 @@ export default function EventDetailPage({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
+      setVotes(prev);
       setVoteError(data?.error || "투표에 실패했어요.");
+      toast.error(data?.error || "투표에 실패했어요.");
       return;
     }
     setVoteError("");
+    toast.success(`${{ attend: "참석", maybe: "미정", absent: "불참" }[status]}으로 투표했어요`);
     load();
   };
 
@@ -442,7 +454,7 @@ export default function EventDetailPage({
   // 참석자를 포지션 균형 맞춰 두 팀으로 나누고, 각 팀 포메이션도 함께
   // 새로 만든다. 이미 내전 모드였다면 두 팀 다 다시 나뉜다(재승인 필요).
   const splitScrimmage = async () => {
-    if (isScrimmage && !confirm("두 팀을 다시 나눌까요? 기존 두 팀 스쿼드가 대체돼요."))
+    if (isScrimmage && !(await confirmSheet("두 팀을 다시 나눌까요? 기존 두 팀 스쿼드가 대체돼요.")))
       return;
     const attendees = members.filter((m) => attendIds.includes(m.id));
     const { teamA, teamB } = splitScrimmageTeams(attendees);
@@ -461,7 +473,7 @@ export default function EventDetailPage({
   // 내전 모드 종료 — B팀 스쿼드를 지우고 평소처럼 A팀(squad) 하나만 쓰는
   // 상태로 되돌린다. A팀 스쿼드 자체는 그대로 둔다.
   const endScrimmage = async () => {
-    if (!confirm("내전 모드를 끝낼까요? B팀 스쿼드는 사라져요.")) return;
+    if (!(await confirmSheet({ title: "내전 모드를 끝낼까요? B팀 스쿼드는 사라져요.", destructive: true, confirmText: "끝내기" }))) return;
     await fetch(`/api/events/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -741,7 +753,7 @@ export default function EventDetailPage({
   };
 
   const removeEvent = async () => {
-    if (!confirm("이 일정을 삭제할까요? 투표와 기록도 함께 삭제돼요.")) return;
+    if (!(await confirmSheet({ title: "이 일정을 삭제할까요? 투표와 기록도 함께 삭제돼요.", destructive: true, confirmText: "삭제" }))) return;
     await fetch(`/api/events/${id}`, { method: "DELETE" });
     router.push("/schedule");
   };
@@ -773,7 +785,7 @@ export default function EventDetailPage({
   };
 
   const notifyNonVoters = async () => {
-    if (!confirm(`미투표자 ${nonVoters.length}명에게 투표 독려 문자를 보낼까요?`)) return;
+    if (!(await confirmSheet(`미투표자 ${nonVoters.length}명에게 투표 독려 문자를 보낼까요?`))) return;
     setNotifying(true);
     setNotifyResult("");
     const res = await fetch(`/api/events/${id}/notify-nonvoters`, { method: "POST" });
@@ -836,39 +848,49 @@ export default function EventDetailPage({
   };
 
   const numInput =
-    "w-12 rounded-lg border border-zinc-300 bg-white px-1 py-1 text-center text-sm";
+    "w-12 rounded-xl border border-zinc-200 bg-white px-1 py-1 text-center text-sm";
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+      <section
+        className={
+          editingInfo
+            ? "card p-4"
+            : "overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 p-5 text-white shadow-lg shadow-blue-900/20"
+        }
+      >
         <div className="flex items-center justify-between">
-          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800">
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+              editingInfo ? "bg-blue-50 text-blue-700" : "bg-white/15 text-white"
+            }`}
+          >
             {dDayLabel(event.date)}
           </span>
           {isAdmin && !editingInfo && (
             <div className="flex gap-3">
               <button
                 onClick={startEditInfo}
-                className="text-xs font-semibold text-blue-700 underline"
+                className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white hover:bg-white/25"
               >
                 정보 수정
               </button>
               <button
                 onClick={removeEvent}
-                className="text-xs text-red-500 underline"
+                className="rounded-full bg-red-500/80 px-3 py-1 text-xs font-bold text-white hover:bg-red-500"
               >
-                일정 삭제
+                삭제
               </button>
             </div>
           )}
         </div>
         {editingInfo ? (
-          <div className="mt-3 space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+          <div className="mt-3 space-y-3 rounded-2xl bg-blue-50/70 p-3 ring-1 ring-blue-100">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-semibold text-zinc-500">제목</label>
                 <input
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                   value={infoForm.title}
                   onChange={(e) => setInfoForm({ ...infoForm, title: e.target.value })}
                 />
@@ -876,7 +898,7 @@ export default function EventDetailPage({
               <div>
                 <label className="text-xs font-semibold text-zinc-500">유형</label>
                 <select
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                   value={infoForm.type}
                   onChange={(e) =>
                     setInfoForm({ ...infoForm, type: e.target.value as "match" | "social" })
@@ -889,7 +911,7 @@ export default function EventDetailPage({
               <div>
                 <label className="text-xs font-semibold text-zinc-500">상대팀</label>
                 <input
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                   placeholder="경기일 때만"
                   value={infoForm.opponent}
                   onChange={(e) => setInfoForm({ ...infoForm, opponent: e.target.value })}
@@ -899,7 +921,7 @@ export default function EventDetailPage({
                 <label className="text-xs font-semibold text-zinc-500">날짜</label>
                 <input
                   type="date"
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                   value={infoForm.date}
                   onChange={(e) => setInfoForm({ ...infoForm, date: e.target.value })}
                 />
@@ -914,7 +936,7 @@ export default function EventDetailPage({
               <div className="col-span-2">
                 <label className="text-xs font-semibold text-zinc-500">장소</label>
                 <input
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                   value={infoForm.location}
                   onChange={(e) => setInfoForm({ ...infoForm, location: e.target.value })}
                 />
@@ -924,13 +946,13 @@ export default function EventDetailPage({
               <button
                 onClick={saveInfo}
                 disabled={infoSaving || !infoForm.title.trim() || !infoForm.date}
-                className="flex-1 rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                className="flex-1 rounded-2xl bg-blue-700 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-700/20 disabled:opacity-40"
               >
                 {infoSaving ? "저장 중…" : "저장"}
               </button>
               <button
                 onClick={() => setEditingInfo(false)}
-                className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-600"
+                className="rounded-2xl bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-700"
               >
                 취소
               </button>
@@ -938,18 +960,18 @@ export default function EventDetailPage({
           </div>
         ) : (
           <>
-            <h1 className="mt-2 text-lg font-bold">
+            <h1 className="mt-3 text-2xl font-extrabold tracking-tight">
               {event.title}
               {event.opponent && (
-                <span className="text-zinc-600"> vs {event.opponent}</span>
+                <span className="font-semibold text-blue-100"> vs {event.opponent}</span>
               )}
             </h1>
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="mt-1.5 text-sm text-blue-100">
               {formatDate(event.date, event.time)}
               {event.location && ` · ${event.location}`}
             </p>
             {weather && (
-              <p className="mt-1 text-sm font-semibold text-zinc-600">
+              <p className="mt-1 text-sm font-semibold text-blue-50">
                 {weather.pty ? WEATHER_EMOJI[weather.pty] : weather.sky ? WEATHER_EMOJI[weather.sky] : ""}{" "}
                 {weather.pty ?? weather.sky ?? ""}
                 {weather.tmp != null && ` · ${weather.tmp}°C`}
@@ -959,7 +981,11 @@ export default function EventDetailPage({
           </>
         )}
         {event.scored != null && event.conceded != null && (
-          <p className="mt-2 text-2xl font-extrabold text-blue-700">
+          <p
+            className={`mt-3 text-4xl font-black tabular-nums tracking-tight ${
+              editingInfo ? "text-blue-700" : "text-white"
+            }`}
+          >
             {event.scored} : {event.conceded}
             {event.conceded === 0 && (
               <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
@@ -970,8 +996,8 @@ export default function EventDetailPage({
         )}
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-base font-bold">참석 투표</h2>
+      <section className="card p-4">
+        <h2 className="mb-3 text-lg font-extrabold tracking-tight">참석 투표</h2>
         {voteClosed && (
           <p className="mb-3 rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-600">
             투표가 마감됐어요 (참석 {ATTEND_CAP}명 도달). 참석하고 싶으면 아래 댓글로 남겨 주세요.
@@ -1045,7 +1071,7 @@ export default function EventDetailPage({
           <div className="mt-4 border-t border-zinc-100 pt-3">
             <div className="flex items-center gap-2">
               <select
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                 value={adminAddPick}
                 onChange={(e) => setAdminAddPick(e.target.value)}
               >
@@ -1150,7 +1176,7 @@ export default function EventDetailPage({
           {myId ? (
             <div className="flex items-center gap-2">
               <input
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                 placeholder="참석 의사나 하고 싶은 말을 남겨보세요"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
@@ -1179,7 +1205,7 @@ export default function EventDetailPage({
           {showGuestForm && (
             <div className="mt-3 space-y-2 rounded-xl bg-zinc-50 p-3">
               <input
-                className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
                 placeholder="용병 이름"
                 value={guestForm.name}
                 onChange={(e) =>
@@ -1188,7 +1214,7 @@ export default function EventDetailPage({
               />
               <div className="grid grid-cols-2 gap-2">
                 <select
-                  className="rounded-xl border border-zinc-300 bg-white px-2 py-2 text-sm"
+                  className="rounded-xl border border-zinc-200 bg-white px-2 py-2 text-sm"
                   value={guestForm.pos1}
                   onChange={(e) =>
                     setGuestForm({
@@ -1204,7 +1230,7 @@ export default function EventDetailPage({
                   ))}
                 </select>
                 <select
-                  className="rounded-xl border border-zinc-300 bg-white px-2 py-2 text-sm"
+                  className="rounded-xl border border-zinc-200 bg-white px-2 py-2 text-sm"
                   value={guestForm.pos2}
                   onChange={(e) =>
                     setGuestForm({
@@ -1223,7 +1249,7 @@ export default function EventDetailPage({
               <button
                 onClick={addGuest}
                 disabled={addingGuest || !guestForm.name.trim()}
-                className="w-full rounded-xl bg-blue-700 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                className="w-full rounded-2xl bg-blue-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
               >
                 {addingGuest ? "추가 중…" : "용병 추가 + 이 경기 참석 등록"}
               </button>
@@ -1237,10 +1263,10 @@ export default function EventDetailPage({
       </section>
 
       {event.type === "match" && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <section className="card p-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-bold">스쿼드 (4-1-2-2-1)</h2>
+              <h2 className="text-lg font-extrabold tracking-tight">스쿼드 (4-1-2-2-1)</h2>
               {isSquadLocked && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
                   🔒 확정된 스쿼드
@@ -1532,7 +1558,7 @@ export default function EventDetailPage({
                           </span>
                           {!isSplit && (
                             <select
-                              className="flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                              className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                               value={asg?.memberId ?? ""}
                               onChange={(e) =>
                                 assignSlot(activeQuarter, slot.id, "full", e.target.value)
@@ -1554,7 +1580,7 @@ export default function EventDetailPage({
                             <label className="flex items-center gap-1">
                               <span className="shrink-0 text-[11px] text-zinc-400">전반</span>
                               <select
-                                className="flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                                className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                                 value={asg?.memberId ?? ""}
                                 onChange={(e) =>
                                   assignSlot(activeQuarter, slot.id, "first", e.target.value)
@@ -1567,7 +1593,7 @@ export default function EventDetailPage({
                             <label className="flex items-center gap-1">
                               <span className="shrink-0 text-[11px] text-zinc-400">후반</span>
                               <select
-                                className="flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                                className="flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                                 value={asg?.memberId2 ?? ""}
                                 onChange={(e) =>
                                   assignSlot(activeQuarter, slot.id, "second", e.target.value)
@@ -1587,7 +1613,7 @@ export default function EventDetailPage({
               )}
             </>
           ) : (
-            <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-400">
+            <p className="rounded-2xl bg-zinc-50 p-5 text-center text-sm text-zinc-400">
               아직 스쿼드가 없어요. 참석 투표가 모이면 자동 생성되거나, 위
               버튼으로 바로 만들 수 있어요.
             </p>
@@ -1596,7 +1622,7 @@ export default function EventDetailPage({
       )}
 
       {event.type === "match" && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <section className="card p-4">
           <h2 className="mb-1 text-base font-bold">경기 기록</h2>
           <p className="mb-3 text-xs text-zinc-400">
             쿼터별로 스코어와 득점·어시스트를 입력하면 자동으로 합산돼서 최종
@@ -1609,7 +1635,7 @@ export default function EventDetailPage({
           {isAdmin && (
             <div className="mb-3 flex items-center gap-2 rounded-lg bg-zinc-50 p-2">
               <select
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                 value={adminAddPick}
                 onChange={(e) => setAdminAddPick(e.target.value)}
               >
@@ -1683,7 +1709,7 @@ export default function EventDetailPage({
             {recordQuarters[recordQuarterIdx].goals.map((g) => (
               <div key={g.key} className="flex items-center gap-2">
                 <select
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                   value={g.scorerId}
                   onChange={(e) =>
                     updateGoal(recordQuarterIdx, g.key, { scorerId: e.target.value })
@@ -1700,7 +1726,7 @@ export default function EventDetailPage({
                     ))}
                 </select>
                 <select
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                   value={g.assistId}
                   onChange={(e) =>
                     updateGoal(recordQuarterIdx, g.key, { assistId: e.target.value })
@@ -1766,7 +1792,7 @@ export default function EventDetailPage({
 
           <button
             onClick={saveRecords}
-            className="mt-4 w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white"
+            className="mt-4 w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20"
           >
             저장하고 게시
           </button>
@@ -1779,11 +1805,11 @@ export default function EventDetailPage({
       )}
 
       {event.type === "match" && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-          <h2 className="mb-3 text-base font-bold">MVP 투표</h2>
+        <section className="card p-4">
+          <h2 className="mb-3 text-lg font-extrabold tracking-tight">MVP 투표</h2>
           <div className="flex gap-2">
             <select
-              className="flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+              className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
               value={mvpPick || (myMvpVote != null ? String(myMvpVote) : "")}
               onChange={(e) => setMvpPick(e.target.value)}
               disabled={!myId || !amAttendee}
@@ -1801,7 +1827,7 @@ export default function EventDetailPage({
             <button
               onClick={voteMvp}
               disabled={!myId || !amAttendee || !mvpPick}
-              className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              className="rounded-full bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-md shadow-blue-700/20 disabled:opacity-40"
             >
               투표
             </button>

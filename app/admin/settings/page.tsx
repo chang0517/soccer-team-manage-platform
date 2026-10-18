@@ -99,7 +99,7 @@ export default function TeamSettingsPage() {
     );
   }
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   const save = async () => {
     setSaving(true);
@@ -134,9 +134,9 @@ export default function TeamSettingsPage() {
       <Link href="/admin" className="text-sm font-semibold text-blue-700">
         ← 운영진 메뉴
       </Link>
-      <h1 className="text-lg font-bold">팀 설정</h1>
+      <h1 className="text-[22px] font-extrabold tracking-tight">팀 설정</h1>
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-3 card p-4">
         <h2 className="text-sm font-bold">벌금 안내</h2>
         <label className="block text-xs font-semibold text-zinc-500">
           입금 계좌
@@ -158,7 +158,7 @@ export default function TeamSettingsPage() {
         </label>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-3 card p-4">
         <h2 className="text-sm font-bold">랭킹 점수 배율</h2>
         <p className="text-xs text-zinc-500">
           랭킹 계산에 쓰이는 배율이에요. 바꾸면 그 순간부터의 새 기록에 적용돼요
@@ -183,7 +183,7 @@ export default function TeamSettingsPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+      <div className="rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-4">
         <h2 className="text-sm font-bold">실시간 미리보기 — 역대 랭킹 TOP 10</h2>
         <p className="mb-2 text-xs text-zinc-500">
           위 배율을 바꾸면 저장하지 않아도 여기 숫자가 바로 바뀌어요.
@@ -193,7 +193,7 @@ export default function TeamSettingsPage() {
           <p className="text-xs text-red-500">숫자를 전부 올바르게 입력해 주세요.</p>
         )}
         {rawData && draftRules && (
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-100">
             {previewRanking.map((r, i) => (
               <div
                 key={r.member.id}
@@ -230,7 +230,7 @@ export default function TeamSettingsPage() {
       <button
         onClick={save}
         disabled={saving}
-        className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+        className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
       >
         {saving ? "저장 중…" : "저장"}
       </button>

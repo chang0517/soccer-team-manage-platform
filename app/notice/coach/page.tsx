@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/useSession";
 import type { AnnouncementRow } from "@/lib/types";
 
@@ -22,6 +24,7 @@ function formatDateHeader(dateStr: string): string {
 export default function CoachFeedbackPage() {
   const { user } = useSession();
   const [items, setItems] = useState<AnnouncementRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -30,7 +33,12 @@ export default function CoachFeedbackPage() {
   const [error, setError] = useState("");
 
   const load = () =>
-    fetch("/api/announcements").then((r) => r.json()).then(setItems);
+    fetch("/api/announcements")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: AnnouncementRow[]) => {
+        setItems(rows);
+        setLoaded(true);
+      });
 
   useEffect(() => {
     load();
@@ -55,10 +63,11 @@ export default function CoachFeedbackPage() {
     setBody("");
     setFeedbackDate(todayStr());
     setShowForm(false);
+    toast.success("코치 피드백을 올렸어요");
     load();
   };
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   const feedback = items.filter((a) => a.category === "coach_feedback");
   const groups = new Map<string, AnnouncementRow[]>();
@@ -75,11 +84,11 @@ export default function CoachFeedbackPage() {
         ← 게시판
       </Link>
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">🗣️ 코치 피드백</h1>
+        <h1 className="text-[22px] font-extrabold tracking-tight">🗣️ 코치 피드백</h1>
         {user?.role === "admin" && (
           <button
             onClick={() => setShowForm((v) => !v)}
-            className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-full bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-md shadow-blue-700/20"
           >
             {showForm ? "닫기" : "+ 피드백 기록"}
           </button>
@@ -87,7 +96,7 @@ export default function CoachFeedbackPage() {
       </div>
 
       {showForm && (
-        <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+        <div className="space-y-3 rounded-3xl bg-blue-50/70 ring-1 ring-blue-100 p-4">
           <label className="block text-xs font-semibold text-zinc-500">
             날짜
             <input
@@ -114,20 +123,22 @@ export default function CoachFeedbackPage() {
           <button
             onClick={submit}
             disabled={saving || !title.trim() || !body.trim() || !feedbackDate}
-            className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
           >
             {saving ? "저장 중…" : "기록하기"}
           </button>
         </div>
       )}
 
-      {feedback.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400">
+      {!loaded && <ListSkeleton rows={3} />}
+
+      {loaded && feedback.length === 0 && (
+        <p className="card p-8 text-center text-sm text-zinc-400">
           아직 기록된 코치 피드백이 없어요.
         </p>
       )}
 
-      <div className="space-y-5">
+      <div className="stagger space-y-5">
         {sortedDates.map((date) => (
           <div key={date}>
             <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-400">
@@ -138,7 +149,7 @@ export default function CoachFeedbackPage() {
                 <Link
                   key={a.id}
                   href={`/notice/${a.id}`}
-                  className="block rounded-2xl border border-zinc-200 bg-white p-4 hover:bg-zinc-50"
+                  className="block card p-4 transition-colors hover:bg-zinc-50"
                 >
                   <p className="font-semibold">{a.title}</p>
                   <p className="mt-1 text-xs text-zinc-400">{a.authorName}</p>

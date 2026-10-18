@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
@@ -52,11 +53,11 @@ export default function MigrateTeamPage() {
     );
   }
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   const run = async () => {
     if (!sourceUrl.trim() || !teamSlug.trim() || !teamName.trim()) return;
-    if (!confirm(`"${teamName}" 팀으로 데이터를 복사할까요? (slug: ${teamSlug})`)) return;
+    if (!(await confirmSheet(`"${teamName}" 팀으로 데이터를 복사할까요? (slug: ${teamSlug})`))) return;
     setRunning(true);
     setError("");
     setResult(null);
@@ -105,7 +106,7 @@ export default function MigrateTeamPage() {
   };
 
   const removeTeam = async (teamId: number, name: string) => {
-    if (!confirm(`"${name}" 팀을 완전히 삭제할까요? 그 팀의 모든 데이터가 사라져요.`))
+    if (!(await confirmSheet({ title: `"${name}" 팀을 완전히 삭제할까요? 그 팀의 모든 데이터가 사라져요.`, destructive: true, confirmText: "삭제" })))
       return;
     setTeamBusyId(teamId);
     setTeamsError("");
@@ -128,7 +129,7 @@ export default function MigrateTeamPage() {
       <Link href="/admin" className="text-sm font-semibold text-blue-700">
         ← 운영진 메뉴
       </Link>
-      <h1 className="text-lg font-bold">기존 팀 데이터 이관</h1>
+      <h1 className="text-[22px] font-extrabold tracking-tight">기존 팀 데이터 이관</h1>
       <p className="text-sm text-zinc-500">
         레이븐·블룸처럼 단독으로 운영 중인 팀의 운영 DB에서 회원·일정·투표·기록
         등을 통째로 가져와 플랫폼의 새 팀으로 만들어요. 기존 DB는 건드리지
@@ -136,7 +137,7 @@ export default function MigrateTeamPage() {
         생성).
       </p>
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-3 card p-4">
         <label className="block text-xs font-semibold text-zinc-500">
           원본 DATABASE_URL (레이븐/블룸의 Supabase 연결 문자열)
           <textarea
@@ -186,7 +187,7 @@ export default function MigrateTeamPage() {
           disabled={
             running || !sourceUrl.trim() || !teamSlug.trim() || !teamName.trim()
           }
-          className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
         >
           {running ? "이관 중… (몇 분 걸릴 수 있어요)" : "이관 시작"}
         </button>
@@ -223,12 +224,12 @@ export default function MigrateTeamPage() {
           {teams.map((t) => (
             <div
               key={t.id}
-              className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-200 bg-white p-3"
+              className="flex flex-wrap items-center gap-2 card p-3"
             >
               <span className="text-xs text-zinc-400">#{t.id}</span>
               <span className="font-semibold">{t.name}</span>
               <input
-                className="w-28 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm"
+                className="w-28 rounded-xl border border-zinc-200 bg-white px-2 py-1 text-sm"
                 value={slugDrafts[t.id] ?? t.slug}
                 onChange={(e) =>
                   setSlugDrafts((d) => ({ ...d, [t.id]: e.target.value }))

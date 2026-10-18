@@ -189,7 +189,7 @@ export default function TacticsPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 pb-24 pt-6 md:pb-10">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="text-lg font-bold">전술 시뮬레이터</h1>
+        <h1 className="text-[22px] font-extrabold tracking-tight">전술 시뮬레이터</h1>
         <Link href="/tactics/edit" className="text-sm font-semibold text-blue-700">
           ✏️ 직접 만들기 →
         </Link>
@@ -203,7 +203,7 @@ export default function TacticsPage() {
         진행되고, 다시 열면 이어서 확인해요.
       </p>
 
-      <details open className="mb-4 rounded-2xl border border-zinc-200 bg-white p-3">
+      <details open className="mb-4 card p-3">
         <summary className="cursor-pointer text-sm font-bold text-zinc-700">
           구역 안내 — A열이 상대 골문 쪽, E열이 우리 골문 쪽
         </summary>
@@ -269,7 +269,7 @@ export default function TacticsPage() {
       )}
 
       {scene && (
-        <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="mt-6 card p-4">
           <TacticsBoard scene={scene} />
         </div>
       )}
@@ -291,7 +291,7 @@ export default function TacticsPage() {
           AI로 생성했거나 직접 만들어서 저장한 전술판을 모아둬요.
         </p>
         {savedFetched && savedTactics.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400">
+          <p className="card p-8 text-center text-sm text-zinc-400">
             아직 저장된 전술이 없어요.
           </p>
         )}
@@ -300,7 +300,7 @@ export default function TacticsPage() {
             <Link
               key={it.id}
               href={`/tactics/${it.id}`}
-              className="block rounded-2xl border border-zinc-200 bg-white p-4 hover:bg-zinc-50"
+              className="block card p-4 hover:bg-zinc-50"
             >
               <p className="font-semibold">{it.title}</p>
               <p className="mt-1 text-xs text-zinc-400">

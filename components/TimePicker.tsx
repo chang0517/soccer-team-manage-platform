@@ -29,7 +29,7 @@ export default function TimePicker({
   onChange: (v: string) => void;
 }) {
   const { ampm, hour12, minute } = parse(value || "09:00");
-  const select = "rounded-xl border border-zinc-300 bg-white px-2 py-2 text-sm";
+  const select = "rounded-xl border border-zinc-200 bg-white px-2 py-2 text-sm";
 
   return (
     <div className="flex gap-2">

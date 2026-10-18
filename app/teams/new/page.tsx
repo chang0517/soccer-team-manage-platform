@@ -1,5 +1,6 @@
 "use client";
 
+import AuthHeader from "@/components/ui/AuthHeader";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,16 +63,16 @@ export default function NewTeamPage() {
     }
   };
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   return (
-    <div className="mx-auto max-w-sm space-y-4 pt-10">
-      <h1 className="text-center text-lg font-bold">새 팀 만들기</h1>
+    <div className="mx-auto max-w-sm space-y-5 pt-6">
+      <AuthHeader title="새 팀 만들기" />
       <p className="text-center text-xs text-zinc-500">
         여기서 만든 계정이 이 팀의 첫 운영진이 돼요. 이후 팀원들은 아래 팀
         코드로 가입 신청을 하고, 운영진이 승인하면 합류합니다.
       </p>
-      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="space-y-3 card p-4">
         <div>
           <label className="text-xs font-semibold text-zinc-500">팀 이름</label>
           <input
@@ -124,7 +125,7 @@ export default function NewTeamPage() {
         <button
           onClick={submit}
           disabled={loading || !valid}
-          className="w-full rounded-xl bg-blue-700 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+          className="w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 disabled:opacity-40"
         >
           {loading ? "만드는 중…" : "팀 만들기"}
         </button>

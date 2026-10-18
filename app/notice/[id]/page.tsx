@@ -3,6 +3,9 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { confirmSheet } from "@/components/ui/ConfirmSheet";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/useSession";
 import type { AnnouncementRow } from "@/lib/types";
 
@@ -35,7 +38,7 @@ export default function NoticeDetailPage({
     load();
   }, [id]);
 
-  if (!item) return <p className="py-10 text-center text-zinc-400">불러오는 중…</p>;
+  if (!item) return <PageSkeleton />;
 
   const isAdmin = user?.role === "admin";
   const isCoachFeedback = item.category === "coach_feedback";
@@ -50,23 +53,28 @@ export default function NoticeDetailPage({
 
   const save = async () => {
     setSaving(true);
-    await fetch(`/api/announcements/${id}`, {
+    const res = await fetch(`/api/announcements/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(hasDate ? { title, body, feedbackDate } : { title, body }),
     });
     setSaving(false);
+    if (!res.ok) {
+      toast.error("수정에 실패했어요");
+      return;
+    }
     setEditing(false);
+    toast.success("수정했어요");
     load();
   };
 
   const remove = async () => {
-    if (!confirm("이 글을 삭제할까요?")) return;
+    if (!(await confirmSheet({ title: "이 글을 삭제할까요?", destructive: true, confirmText: "삭제" }))) return;
     await fetch(`/api/announcements/${id}`, { method: "DELETE" });
     router.push(backHref);
   };
 
-  const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
 
   return (
     <div className="space-y-4">
@@ -74,7 +82,7 @@ export default function NoticeDetailPage({
         {backLabel}
       </Link>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="card p-4">
         {editing ? (
           <div className="space-y-3">
             {hasDate && (
@@ -105,7 +113,7 @@ export default function NoticeDetailPage({
               </button>
               <button
                 onClick={() => setEditing(false)}
-                className="flex-1 rounded-xl border border-zinc-300 py-2 text-sm"
+                className="flex-1 rounded-2xl bg-zinc-100 py-2.5 text-sm font-semibold text-zinc-700"
               >
                 취소
               </button>
@@ -125,7 +133,7 @@ export default function NoticeDetailPage({
                     🏋️ 훈련 세션
                   </span>
                 )}
-                <h1 className="text-lg font-bold">{item.title}</h1>
+                <h1 className="text-[22px] font-extrabold tracking-tight">{item.title}</h1>
               </div>
               {isAdmin && (
                 <div className="flex shrink-0 gap-2 text-xs">

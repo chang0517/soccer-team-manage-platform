@@ -66,7 +66,7 @@ export default function PushPrompt() {
   if (!visible) return null;
 
   return (
-    <div className="no-print fixed inset-x-4 bottom-20 z-30 mx-auto flex max-w-sm items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-lg md:bottom-6">
+    <div className="no-print fixed inset-x-4 bottom-24 z-30 mx-auto flex max-w-sm items-center gap-3 rounded-3xl bg-white/95 p-3.5 shadow-2xl shadow-blue-900/15 ring-1 ring-blue-100 backdrop-blur-xl md:bottom-6">
       <span className="text-2xl">🔔</span>
       <p className="flex-1 text-xs text-zinc-600">
         새 경기 일정이 올라오면 바로 알림을 받아보세요.
@@ -74,7 +74,7 @@ export default function PushPrompt() {
       <button
         onClick={enable}
         disabled={busy}
-        className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+        className="shrink-0 rounded-full bg-blue-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-700/20 disabled:opacity-40"
       >
         {busy ? "설정 중…" : "알림 켜기"}
       </button>

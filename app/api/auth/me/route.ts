@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/auth";
 import { getTeamById, getUserById } from "@/lib/db";
+import { DEFAULT_SCORE_RULES } from "@/lib/types";
 
 export async function GET() {
   const session = await getSessionUser();
@@ -22,6 +23,7 @@ export async function GET() {
       teamId: user.teamId,
       teamName: team?.name ?? "",
       teamLogoUrl: team?.logoUrl ?? null,
+      teamScoreRules: team?.scoreRules ?? DEFAULT_SCORE_RULES,
       username: user.username,
       displayName: user.displayName,
       role: user.role,

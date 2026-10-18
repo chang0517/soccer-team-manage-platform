@@ -58,7 +58,7 @@ export default function FinesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">이번 달 미투표자 · 벌금 안내</h1>
+        <h1 className="text-[22px] font-extrabold tracking-tight">이번 달 미투표자 · 벌금 안내</h1>
         <Link href="/admin" className="text-sm text-blue-700">
           ← 운영진
         </Link>
@@ -72,7 +72,7 @@ export default function FinesPage() {
 
       <div className="flex items-center gap-2">
         <select
-          className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
           value={year}
           onChange={(e) => setYearMonth({ year: Number(e.target.value), month })}
         >
@@ -83,7 +83,7 @@ export default function FinesPage() {
           ))}
         </select>
         <select
-          className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+          className="rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
           value={month}
           onChange={(e) => setYearMonth({ year, month: Number(e.target.value) })}
         >
@@ -97,14 +97,14 @@ export default function FinesPage() {
       </div>
 
       {!busy && notices.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400">
+        <p className="card p-8 text-center text-sm text-zinc-400">
           {year}년 {month}월엔 미투표자가 없어요. 🎉
         </p>
       )}
 
       <div className="space-y-3">
         {notices.map((n) => (
-          <div key={n.memberId} className="rounded-2xl border border-zinc-200 bg-white p-4">
+          <div key={n.memberId} className="card p-4">
             <div className="flex items-center justify-between">
               <p className="font-bold">
                 {n.name}
