@@ -4,6 +4,7 @@ import AuthHeader from "@/components/ui/AuthHeader";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { notifySessionChanged } from "@/components/useSession";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 export default function LoginPage() {
@@ -43,6 +44,7 @@ export default function LoginPage() {
         return;
       }
       localStorage.setItem(TEAM_SLUG_KEY, teamSlug.trim());
+      await notifySessionChanged();
       router.push("/");
       router.refresh();
     } catch {

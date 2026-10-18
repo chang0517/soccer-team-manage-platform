@@ -4,6 +4,7 @@ import AuthHeader from "@/components/ui/AuthHeader";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { notifySessionChanged } from "@/components/useSession";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 // 팀 코드는 로그인/가입 화면에서 팀을 구분하는 값이라 영문 소문자·숫자·
@@ -54,6 +55,7 @@ export default function NewTeamPage() {
         return;
       }
       if (data.teamSlug) localStorage.setItem(TEAM_SLUG_KEY, data.teamSlug);
+      await notifySessionChanged();
       router.push("/");
       router.refresh();
     } catch {
