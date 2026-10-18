@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/useSession";
-import type { TeamRow } from "@/lib/types";
+import { computeRanking } from "@/lib/points";
+import type {
+  EventItem,
+  HistoricalStats,
+  Member,
+  MvpVoteRow,
+  RecordRow,
+  ScoreRules,
+  TeamRow,
+} from "@/lib/types";
 
 const SCORE_FIELDS: { key: keyof TeamRow["scoreRules"]; label: string; hint: string }[] = [
   { key: "participation", label: "출전", hint: "경기에 출전만 해도 받는 점수" },
@@ -12,6 +21,14 @@ const SCORE_FIELDS: { key: keyof TeamRow["scoreRules"]; label: string; hint: str
   { key: "cleanSheetDefence", label: "클린시트 (GK·CB·WB)", hint: "무실점 경기 1회당 점수" },
   { key: "cleanSheetDm", label: "클린시트 (DM·수미)", hint: "무실점 경기 1회당 점수(보통 수비진의 절반)" },
 ];
+
+interface RankingRawData {
+  members: Member[];
+  events: EventItem[];
+  records: RecordRow[];
+  mvpVotes: MvpVoteRow[];
+  historical: HistoricalStats[];
+}
 
 export default function TeamSettingsPage() {
   const { user, loading } = useSession();
@@ -22,6 +39,7 @@ export default function TeamSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [rawData, setRawData] = useState<RankingRawData | null>(null);
 
   const load = () =>
     fetch("/api/admin/team-settings")
@@ -38,8 +56,36 @@ export default function TeamSettingsPage() {
       });
 
   useEffect(() => {
-    if (user?.role === "admin") load();
+    if (user?.role === "admin") {
+      load();
+      fetch("/api/admin/ranking-raw")
+        .then((r) => (r.ok ? r.json() : null))
+        .then(setRawData);
+    }
   }, [user]);
+
+  // 입력칸에 타이핑하는 즉시(서버 왕복 없이) 미리보기 랭킹을 다시 계산한다.
+  const draftRules: ScoreRules | null = useMemo(() => {
+    if (Object.keys(scoreDrafts).length === 0) return null;
+    const vals = Object.fromEntries(
+      SCORE_FIELDS.map((f) => [f.key, Number(scoreDrafts[f.key])])
+    ) as unknown as ScoreRules;
+    if (Object.values(vals).some((v) => typeof v !== "number" || Number.isNaN(v))) return null;
+    return vals;
+  }, [scoreDrafts]);
+
+  const previewRanking = useMemo(() => {
+    if (!rawData || !draftRules) return [];
+    return computeRanking(
+      rawData.members,
+      rawData.events,
+      rawData.records,
+      rawData.mvpVotes,
+      rawData.historical,
+      null,
+      draftRules
+    ).slice(0, 10);
+  }, [rawData, draftRules]);
 
   if (loading) return null;
   if (!user || user.role !== "admin") {
@@ -135,6 +181,43 @@ export default function TeamSettingsPage() {
             </span>
           </label>
         ))}
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+        <h2 className="text-sm font-bold">실시간 미리보기 — 역대 랭킹 TOP 10</h2>
+        <p className="mb-2 text-xs text-zinc-500">
+          위 배율을 바꾸면 저장하지 않아도 여기 숫자가 바로 바뀌어요.
+        </p>
+        {!rawData && <p className="text-xs text-zinc-400">불러오는 중…</p>}
+        {rawData && !draftRules && (
+          <p className="text-xs text-red-500">숫자를 전부 올바르게 입력해 주세요.</p>
+        )}
+        {rawData && draftRules && (
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            {previewRanking.map((r, i) => (
+              <div
+                key={r.member.id}
+                className="flex items-center gap-3 border-b border-zinc-100 px-3 py-2 text-sm last:border-0"
+              >
+                <span className="w-5 text-center text-xs font-bold text-zinc-400">
+                  {["🥇", "🥈", "🥉"][i] ?? i + 1}
+                </span>
+                <span className="flex-1 font-semibold">{r.member.name}</span>
+                <span className="text-xs text-zinc-500">
+                  출전{r.played} ⚽{r.goals} 🎯{r.assists} 🧤{r.cleanCount}
+                </span>
+                <span className="w-14 text-right font-bold text-blue-700">
+                  {r.total}점
+                </span>
+              </div>
+            ))}
+            {previewRanking.length === 0 && (
+              <p className="p-4 text-center text-xs text-zinc-400">
+                아직 계산할 기록이 없어요.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
