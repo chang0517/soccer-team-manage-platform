@@ -554,6 +554,39 @@ export async function updateMember(teamId: number, id: number, m: Omit<Member, "
   );
 }
 
+export async function deleteUserRow(teamId: number, id: number) {
+  const pool = await ready();
+  await pool.query("DELETE FROM users WHERE id=$1 AND team_id=$2", [id, teamId]);
+}
+
+/**
+ * 선수 한 명과 그 선수에 딸린 행 데이터(투표·기록·MVP·댓글·역대 기록·만든
+ * 투표·알림 구독)를 모두 지운다. 일정 JSON(스쿼드·쿼터 기록) 정리는 db.ts의
+ * deleteAccount가 따로 한다.
+ */
+export async function purgeMemberRows(teamId: number, memberId: number) {
+  const pool = await ready();
+  for (const t of ["votes", "records", "comments", "historical_stats", "poll_votes", "push_subscriptions"]) {
+    await pool.query(`DELETE FROM ${t} WHERE member_id=$1 AND team_id=$2`, [memberId, teamId]);
+  }
+  await pool.query("DELETE FROM mvp_votes WHERE (voter_id=$1 OR votee_id=$1) AND team_id=$2", [memberId, teamId]);
+  const { rows: polls } = await pool.query("SELECT id FROM polls WHERE created_by=$1 AND team_id=$2", [memberId, teamId]);
+  for (const p of polls) {
+    await pool.query("DELETE FROM poll_votes WHERE poll_id=$1 AND team_id=$2", [p.id, teamId]);
+    await pool.query("DELETE FROM poll_options WHERE poll_id=$1 AND team_id=$2", [p.id, teamId]);
+    await pool.query("DELETE FROM polls WHERE id=$1 AND team_id=$2", [p.id, teamId]);
+  }
+  await pool.query("UPDATE hall_of_fame SET captain_id=NULL WHERE captain_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET vice_captain_id=NULL WHERE vice_captain_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET manager_id=NULL WHERE manager_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET top_scorer_id=NULL WHERE top_scorer_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET top_assist_id=NULL WHERE top_assist_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET clean_sheet_first_id=NULL WHERE clean_sheet_first_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE hall_of_fame SET overall_first_id=NULL WHERE overall_first_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("UPDATE users SET member_id=NULL WHERE member_id=$1 AND team_id=$2", [memberId, teamId]);
+  await pool.query("DELETE FROM members WHERE id=$1 AND team_id=$2", [memberId, teamId]);
+}
+
 export async function deleteMember(teamId: number, id: number) {
   const pool = await ready();
   await pool.query("DELETE FROM members WHERE id=$1 AND team_id=$2", [id, teamId]);

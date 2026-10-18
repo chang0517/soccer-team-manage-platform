@@ -429,6 +429,35 @@ export function updateMember(teamId: number, id: number, m: Omit<Member, "id">) 
     .run(m.name, m.backNo, m.pos1, m.pos2, m.isGuest ? 1 : 0, m.phone ?? null, id, teamId);
 }
 
+export function deleteUserRow(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM users WHERE id=? AND team_id=?").run(id, teamId);
+}
+
+export function purgeMemberRows(teamId: number, memberId: number) {
+  const db = getDb();
+  db.transaction(() => {
+    for (const t of ["votes", "records", "comments", "historical_stats", "poll_votes", "push_subscriptions"]) {
+      db.prepare(`DELETE FROM ${t} WHERE member_id=? AND team_id=?`).run(memberId, teamId);
+    }
+    db.prepare("DELETE FROM mvp_votes WHERE (voter_id=? OR votee_id=?) AND team_id=?").run(memberId, memberId, teamId);
+    const polls = db.prepare("SELECT id FROM polls WHERE created_by=? AND team_id=?").all(memberId, teamId) as { id: number }[];
+    for (const p of polls) {
+      db.prepare("DELETE FROM poll_votes WHERE poll_id=? AND team_id=?").run(p.id, teamId);
+      db.prepare("DELETE FROM poll_options WHERE poll_id=? AND team_id=?").run(p.id, teamId);
+      db.prepare("DELETE FROM polls WHERE id=? AND team_id=?").run(p.id, teamId);
+    }
+    db.prepare("UPDATE hall_of_fame SET captain_id=NULL WHERE captain_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET vice_captain_id=NULL WHERE vice_captain_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET manager_id=NULL WHERE manager_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET top_scorer_id=NULL WHERE top_scorer_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET top_assist_id=NULL WHERE top_assist_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET clean_sheet_first_id=NULL WHERE clean_sheet_first_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE hall_of_fame SET overall_first_id=NULL WHERE overall_first_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("UPDATE users SET member_id=NULL WHERE member_id=? AND team_id=?").run(memberId, teamId);
+    db.prepare("DELETE FROM members WHERE id=? AND team_id=?").run(memberId, teamId);
+  })();
+}
+
 export function deleteMember(teamId: number, id: number) {
   const db = getDb();
   db.prepare("DELETE FROM members WHERE id=? AND team_id=?").run(id, teamId);

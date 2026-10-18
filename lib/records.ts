@@ -101,3 +101,17 @@ export function parseRecordOp(body: unknown): RecordOp | null {
   }
   return null;
 }
+
+/** 쿼터 기록에서 한 선수를 지운다 — 골은 "득점자 미기록"으로 남겨 스코어 유지. */
+export function recordLogWithoutMember(
+  log: QuarterRecordEntry[],
+  memberId: number
+): QuarterRecordEntry[] {
+  return log.map((q) => ({
+    ...q,
+    goals: q.goals.map((g) => ({
+      scorerId: g.scorerId === memberId ? null : g.scorerId,
+      assistId: g.assistId === memberId ? null : g.assistId,
+    })),
+  }));
+}

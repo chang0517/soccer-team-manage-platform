@@ -509,3 +509,20 @@ export function fillEmptySlots(
   });
   return { squad: { ...squad, quarters }, filled };
 }
+
+/** 스쿼드에서 한 선수를 빼낸다(자리는 빈칸, 벤치·승인 목록에서도 제외). */
+export function withoutMember(squad: SquadData, memberId: number): SquadData {
+  const drop = (id: number | null | undefined) => (id === memberId ? null : (id ?? null));
+  return {
+    ...squad,
+    quarters: squad.quarters.map((q) => ({
+      starters: q.starters.map((s) =>
+        s.memberId2 !== undefined
+          ? { ...s, memberId: drop(s.memberId), memberId2: drop(s.memberId2) }
+          : { ...s, memberId: drop(s.memberId) }
+      ),
+      bench: q.bench.filter((id) => id !== memberId),
+    })),
+    ...(squad.approvedBy ? { approvedBy: squad.approvedBy.filter((id) => id !== memberId) } : {}),
+  };
+}

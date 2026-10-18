@@ -227,6 +227,38 @@ export async function getUserByUsername(
     ? pg.getUserByUsername(teamId, username)
     : sqlite.getUserByUsername(teamId, username);
 }
+/**
+ * 계정을 지운다. withMember면 연결된 선수 프로필과 그 선수의 모든 흔적(투표·
+ * 기록·MVP·댓글·역대 기록·만든 투표·알림 구독, 명예의 전당 지정, 일정 안의
+ * 스쿼드 자리와 쿼터별 득점·어시)까지 함께 지운다. 스쿼드 자리는 빈칸,
+ * 득점은 "득점자 미기록"으로 남겨 스코어는 그대로 유지한다.
+ */
+export async function deleteAccount(teamId: number, userId: number, withMember: boolean) {
+  const user = await getUserById(teamId, userId);
+  if (!user) return null;
+  const memberId = withMember ? user.memberId : null;
+  if (memberId != null) {
+    const { withoutMember } = await import("./squad");
+    const { recordLogWithoutMember } = await import("./records");
+    for (const ev of await listEvents(teamId)) {
+      for (const field of ["squad", "scrimmageSquad"] as const) {
+        if (ev[field] && JSON.stringify(ev[field]).includes(String(memberId))) {
+          await mutateEventSquad(teamId, ev.id, field, (cur) => (cur ? withoutMember(cur, memberId) : cur));
+        }
+      }
+      if (ev.recordLog && JSON.stringify(ev.recordLog).includes(String(memberId))) {
+        await mutateEventRecordLog(teamId, ev.id, (cur) => {
+          const recordLog = recordLogWithoutMember(cur ?? [], memberId);
+          return { scored: ev.scored, conceded: ev.conceded, recordLog };
+        });
+      }
+    }
+    await (usePg ? pg.purgeMemberRows(teamId, memberId) : sqlite.purgeMemberRows(teamId, memberId));
+  }
+  await (usePg ? pg.deleteUserRow(teamId, userId) : sqlite.deleteUserRow(teamId, userId));
+  return { user, memberDeleted: memberId != null };
+}
+
 export async function getUserById(teamId: number, id: number): Promise<AppUser | null> {
   return usePg ? pg.getUserById(teamId, id) : sqlite.getUserById(teamId, id);
 }
