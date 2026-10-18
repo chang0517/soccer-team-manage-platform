@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { setAppSetting } from "@/lib/db";
 import { GATEWAY_URL_SETTING } from "@/lib/gateway";
 
@@ -18,8 +18,13 @@ export async function POST(request: Request) {
   const ok =
     given.length === secret.length && timingSafeEqual(Buffer.from(given), Buffer.from(secret));
   if (!ok) {
+    // 지문 = SHA-256 앞 8자리. 값 자체는 알 수 없지만 양쪽 지문을 비교하면
+    // 같은 값인지, 어느 쪽이 다른지 바로 알 수 있다.
+    const fp = (v: string) => createHash("sha256").update(v).digest("hex").slice(0, 8);
     return Response.json(
-      { error: `secret mismatch (platform value has ${secret.length} chars)` },
+      {
+        error: `secret mismatch — platform: ${secret.length} chars, fingerprint ${fp(secret)} / sent: ${given.length} chars, fingerprint ${fp(given)}`,
+      },
       { status: 401 }
     );
   }
