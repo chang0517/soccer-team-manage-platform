@@ -21,6 +21,7 @@ import type {
   RecordRow,
   ScoreRules,
   SquadData,
+  TeamReminder,
   TeamRow,
   UserRole,
   UserStatus,
@@ -217,6 +218,21 @@ function createDb(): Database.Database {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS team_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      day_of_month INTEGER NOT NULL,
+      open_time TEXT NOT NULL,
+      lead_minutes INTEGER NOT NULL DEFAULT 60,
+      target TEXT NOT NULL DEFAULT 'all'
+    );
+    CREATE TABLE IF NOT EXISTS reminder_sends (
+      team_id INTEGER NOT NULL,
+      reminder_id INTEGER NOT NULL,
+      period TEXT NOT NULL,
+      PRIMARY KEY (reminder_id, period)
+    );
   `);
   return db;
 }
@@ -345,6 +361,8 @@ export function deleteTeam(teamId: number) {
     "poll_options",
     "polls",
     "phone_verifications",
+    "reminder_sends",
+    "team_reminders",
     "users",
     "events",
     "members",
@@ -597,6 +615,52 @@ export function mutateEventSquad(
     );
     return { before, after };
   })();
+}
+
+type ReminderDbRow = {
+  id: number;
+  team_id: number;
+  title: string;
+  day_of_month: number;
+  open_time: string;
+  lead_minutes: number;
+  target: string;
+};
+const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
+  id: r.id,
+  teamId: r.team_id,
+  title: r.title,
+  dayOfMonth: r.day_of_month,
+  openTime: r.open_time,
+  leadMinutes: r.lead_minutes,
+  target: r.target === "admins" ? "admins" : "all",
+});
+
+export function listReminders(teamId: number | null) {
+  const db = getDb();
+  const rows = (teamId == null
+    ? db.prepare("SELECT * FROM team_reminders ORDER BY id").all()
+    : db.prepare("SELECT * FROM team_reminders WHERE team_id=? ORDER BY day_of_month, open_time").all(teamId)) as ReminderDbRow[];
+  return rows.map(toReminder);
+}
+
+export function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
+  const db = getDb();
+  const info = db
+    .prepare("INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target) VALUES (?,?,?,?,?,?)")
+    .run(teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target);
+  return toReminder(db.prepare("SELECT * FROM team_reminders WHERE id=?").get(Number(info.lastInsertRowid)) as ReminderDbRow);
+}
+
+export function deleteReminder(teamId: number, id: number) {
+  getDb().prepare("DELETE FROM team_reminders WHERE id=? AND team_id=?").run(id, teamId);
+}
+
+export function claimReminderSend(teamId: number, reminderId: number, period: string) {
+  const r = getDb()
+    .prepare("INSERT OR IGNORE INTO reminder_sends (team_id, reminder_id, period) VALUES (?,?,?)")
+    .run(teamId, reminderId, period);
+  return r.changes > 0;
 }
 
 export function claimEventFlag(

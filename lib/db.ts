@@ -20,6 +20,7 @@ import type {
   RecordRow,
   ScoreRules,
   SquadData,
+  TeamReminder,
   TeamRow,
   UserRole,
   UserStatus,
@@ -135,6 +136,20 @@ export async function mutateEventSquad(
   return usePg
     ? pg.mutateEventSquad(teamId, id, field, fn)
     : sqlite.mutateEventSquad(teamId, id, field, fn);
+}
+export async function listReminders(teamId: number | null) {
+  return usePg ? pg.listReminders(teamId) : sqlite.listReminders(teamId);
+}
+export async function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
+  return usePg ? pg.createReminder(teamId, r) : sqlite.createReminder(teamId, r);
+}
+export async function deleteReminder(teamId: number, id: number) {
+  return usePg ? pg.deleteReminder(teamId, id) : sqlite.deleteReminder(teamId, id);
+}
+export async function claimReminderSend(teamId: number, reminderId: number, period: string) {
+  return usePg
+    ? pg.claimReminderSend(teamId, reminderId, period)
+    : sqlite.claimReminderSend(teamId, reminderId, period);
 }
 export async function claimEventFlag(
   teamId: number,

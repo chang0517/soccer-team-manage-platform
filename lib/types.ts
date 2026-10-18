@@ -180,6 +180,17 @@ export interface QuarterRecordEntry {
   goals: QuarterGoalEntry[];
 }
 
+// 매월 정해진 날·시각에 열리는 예약(구장 예약 오픈 등)을 미리 알려주는
+// 팀별 정기 알림. 오픈 시각 lead_minutes 전에 푸시를 보낸다.
+export interface TeamReminder {
+  id: number;
+  title: string;
+  dayOfMonth: number;
+  openTime: string; // "HH:MM" (한국 시간)
+  leadMinutes: number;
+  target: "all" | "admins";
+}
+
 export interface EventItem {
   id: number;
   title: string;

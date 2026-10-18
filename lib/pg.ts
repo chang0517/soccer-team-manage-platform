@@ -19,6 +19,7 @@ import type {
   RecordRow,
   ScoreRules,
   SquadData,
+  TeamReminder,
   TeamRow,
   UserRole,
   UserStatus,
@@ -238,6 +239,23 @@ async function createTables(client: PoolClient) {
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS team_reminders (
+      id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      day_of_month INTEGER NOT NULL,
+      open_time TEXT NOT NULL,
+      lead_minutes INTEGER NOT NULL DEFAULT 60,
+      target TEXT NOT NULL DEFAULT 'all',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS reminder_sends (
+      team_id INTEGER NOT NULL,
+      reminder_id INTEGER NOT NULL,
+      period TEXT NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (reminder_id, period)
+    );
   `);
 }
 
@@ -265,7 +283,7 @@ const TABLES = [
   "teams", "members", "events", "votes", "records", "mvp_votes", "users",
   "comments", "historical_stats", "announcements", "hall_of_fame",
   "opponent_kits", "push_subscriptions", "polls", "poll_options",
-  "poll_votes", "phone_verifications",
+  "poll_votes", "phone_verifications", "team_reminders", "reminder_sends",
 ];
 
 // 테이블·컬럼이 이미 지금 스키마대로인지 카탈로그만 읽어서 확인한다.
@@ -466,6 +484,8 @@ export async function deleteTeam(teamId: number) {
     "poll_options",
     "polls",
     "phone_verifications",
+    "reminder_sends",
+    "team_reminders",
     "users",
     "events",
     "members",
@@ -758,6 +778,58 @@ export async function mutateEventSquad(
   } finally {
     client.release();
   }
+}
+
+// ---------- 정기 알림 ----------
+type ReminderDbRow = {
+  id: number;
+  team_id: number;
+  title: string;
+  day_of_month: number;
+  open_time: string;
+  lead_minutes: number;
+  target: string;
+};
+const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
+  id: r.id,
+  teamId: r.team_id,
+  title: r.title,
+  dayOfMonth: r.day_of_month,
+  openTime: r.open_time,
+  leadMinutes: r.lead_minutes,
+  target: r.target === "admins" ? "admins" : "all",
+});
+
+export async function listReminders(teamId: number | null) {
+  const pool = await ready();
+  const { rows } = teamId == null
+    ? await pool.query("SELECT * FROM team_reminders ORDER BY id")
+    : await pool.query("SELECT * FROM team_reminders WHERE team_id=$1 ORDER BY day_of_month, open_time", [teamId]);
+  return (rows as ReminderDbRow[]).map(toReminder);
+}
+
+export async function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+    [teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target]
+  );
+  return toReminder(rows[0]);
+}
+
+export async function deleteReminder(teamId: number, id: number) {
+  const pool = await ready();
+  await pool.query("DELETE FROM team_reminders WHERE id=$1 AND team_id=$2", [id, teamId]);
+}
+
+// 그 달(period) 알림을 처음 보내는 요청만 true — 크론이 겹쳐 돌아도 한 번만 간다.
+export async function claimReminderSend(teamId: number, reminderId: number, period: string) {
+  const pool = await ready();
+  const { rowCount } = await pool.query(
+    "INSERT INTO reminder_sends (team_id, reminder_id, period) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+    [teamId, reminderId, period]
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 // 알림 플래그를 false→true로 바꾸는 데 성공한 호출만 true를 받는다 — 여러

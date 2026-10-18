@@ -3,6 +3,7 @@ import { createEvent, listEvents } from "@/lib/db";
 import { after } from "next/server";
 import { formatDate } from "@/lib/format";
 import { processMvpNotifications } from "@/lib/mvpNotify";
+import { processReminders } from "@/lib/reminderNotify";
 import { sendPushToAll } from "@/lib/push";
 
 export async function GET() {
@@ -11,11 +12,15 @@ export async function GET() {
   const events = await listEvents(session.teamId);
   // 홈·일정 화면이 열릴 때마다 응답을 보낸 뒤 MVP 투표 시작/발표 알림을
   // 보낼 때가 된 경기가 있는지 확인한다(하루 한 번 크론만으로는 늦어서).
-  after(() =>
-    processMvpNotifications(session.teamId, events).catch((e) =>
+  after(async () => {
+    await processMvpNotifications(session.teamId, events).catch((e) =>
       console.error("[mvp] notify failed:", e)
-    )
-  );
+    );
+    // 정기 알림(구장 예약 오픈 등)도 크론이 늦을 때를 대비해 같이 확인한다.
+    await processReminders(session.teamId).catch((e) =>
+      console.error("[reminders] notify failed:", e)
+    );
+  });
   return Response.json(events);
 }
 

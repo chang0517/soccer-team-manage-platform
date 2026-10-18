@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ReminderSettings from "@/components/ReminderSettings";
 import { useSession } from "@/components/useSession";
 import { computeRanking } from "@/lib/points";
 import type {
@@ -135,6 +136,8 @@ export default function TeamSettingsPage() {
         ← 운영진 메뉴
       </Link>
       <h1 className="text-[22px] font-extrabold tracking-tight">팀 설정</h1>
+
+      <ReminderSettings />
 
       <div className="space-y-3 card p-4">
         <h2 className="text-sm font-bold">벌금 안내</h2>
