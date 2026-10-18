@@ -249,6 +249,11 @@ async function createTables(client: PoolClient) {
       target TEXT NOT NULL DEFAULT 'all',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS reminder_sends (
       team_id INTEGER NOT NULL,
       reminder_id INTEGER NOT NULL,
@@ -283,7 +288,7 @@ const TABLES = [
   "teams", "members", "events", "votes", "records", "mvp_votes", "users",
   "comments", "historical_stats", "announcements", "hall_of_fame",
   "opponent_kits", "push_subscriptions", "polls", "poll_options",
-  "poll_votes", "phone_verifications", "team_reminders", "reminder_sends",
+  "poll_votes", "phone_verifications", "team_reminders", "reminder_sends", "app_settings",
 ];
 
 // 테이블·컬럼이 이미 지금 스키마대로인지 카탈로그만 읽어서 확인한다.
@@ -811,6 +816,21 @@ export async function mutateEventSquad(
   } finally {
     client.release();
   }
+}
+
+// ---------- 앱 전체 설정(팀과 무관) ----------
+export async function getAppSetting(key: string): Promise<string | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key=$1", [key]);
+  return rows[0]?.value ?? null;
+}
+
+export async function setAppSetting(key: string, value: string) {
+  const pool = await ready();
+  await pool.query(
+    "INSERT INTO app_settings (key, value, updated_at) VALUES ($1,$2,now()) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=now()",
+    [key, value]
+  );
 }
 
 // ---------- 정기 알림 ----------

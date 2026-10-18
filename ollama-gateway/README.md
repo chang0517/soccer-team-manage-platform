@@ -52,6 +52,19 @@ Vercel 쪽 환경변수와 배포를 자동으로 맞춰준다.
    모델명, 예: `gemma4`)도 한 번 설정해두면 된다 — 이 둘은 바뀌지 않으므로
    수동으로 한 번만 넣으면 충분하다.
 
+## 멀티팀 플랫폼에 주소 알려주기
+
+`ngrok-sync.mjs`는 주소가 바뀔 때(그리고 30분마다) 플랫폼의
+`/api/gateway/register`로 새 주소를 보낸다. 플랫폼은 그 주소를 DB에 저장해
+재배포 없이 바로 쓴다(문자 인증·AI 기록 입력).
+
+- 플랫폼 Vercel 프로젝트에 `OLLAMA_GATEWAY_SECRET`(게이트웨이 plist의
+  `GATEWAY_SECRET`과 같은 값)을 한 번 넣어야 등록이 받아들여진다.
+- 보낼 주소는 `GATEWAY_REGISTER_URLS`(쉼표로 여러 개)로 바꿀 수 있고,
+  기본값은 플랫폼 주소다.
+- 예전 단독 앱(raven-fc) Vercel 프로젝트 갱신·재배포가 더는 필요 없으면
+  `SKIP_VERCEL_SYNC=1`로 끈다.
+
 ## 로그 확인
 
 - 게이트웨이: `/tmp/ollama-gateway.log`, `/tmp/ollama-gateway.error.log`

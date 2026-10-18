@@ -1,3 +1,5 @@
+import { GatewayNotConfiguredError, getGateway } from "./gateway";
+
 export interface LlmParsedItem {
   name: string;
   goals: number;
@@ -101,17 +103,13 @@ export async function callOllamaGateway(
   // 훨씬 넉넉하지만, 폭주 시 시간 예산을 통째로 잡아먹는 것은 막는다.
   maxTokens = 4000
 ): Promise<string> {
-  const gatewayUrl = process.env.OLLAMA_GATEWAY_URL;
-  const secret = process.env.OLLAMA_GATEWAY_SECRET;
+  const gateway = await getGateway();
   const model = getConfiguredModel();
 
-  if (!gatewayUrl || !secret) {
-    throw new Error(
-      "서버에 OLLAMA_GATEWAY_URL / OLLAMA_GATEWAY_SECRET 환경변수가 설정되어 있지 않아요."
-    );
-  }
+  if (!gateway) throw new GatewayNotConfiguredError();
+  const { url: gatewayUrl, secret } = gateway;
 
-  const res = await fetch(gatewayUrl.replace(/\/$/, ""), {
+  const res = await fetch(gatewayUrl, {
     method: "POST",
     signal: AbortSignal.timeout(timeoutMs),
     headers: {

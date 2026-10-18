@@ -227,6 +227,10 @@ function createDb(): Database.Database {
       lead_minutes INTEGER NOT NULL DEFAULT 60,
       target TEXT NOT NULL DEFAULT 'all'
     );
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS reminder_sends (
       team_id INTEGER NOT NULL,
       reminder_id INTEGER NOT NULL,
@@ -644,6 +648,19 @@ export function mutateEventSquad(
     );
     return { before, after };
   })();
+}
+
+export function getAppSetting(key: string): string | null {
+  const row = getDb().prepare("SELECT value FROM app_settings WHERE key=?").get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value ?? null;
+}
+
+export function setAppSetting(key: string, value: string) {
+  getDb()
+    .prepare("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    .run(key, value);
 }
 
 type ReminderDbRow = {

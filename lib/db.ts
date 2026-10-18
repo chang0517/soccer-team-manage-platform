@@ -137,6 +137,12 @@ export async function mutateEventSquad(
     ? pg.mutateEventSquad(teamId, id, field, fn)
     : sqlite.mutateEventSquad(teamId, id, field, fn);
 }
+export async function getAppSetting(key: string): Promise<string | null> {
+  return usePg ? pg.getAppSetting(key) : sqlite.getAppSetting(key);
+}
+export async function setAppSetting(key: string, value: string) {
+  return usePg ? pg.setAppSetting(key, value) : sqlite.setAppSetting(key, value);
+}
 export async function listReminders(teamId: number | null) {
   return usePg ? pg.listReminders(teamId) : sqlite.listReminders(teamId);
 }

@@ -1,3 +1,4 @@
+import { GatewayNotConfiguredError, getGateway } from "./gateway";
 import { toE164 } from "./phone";
 
 /**
@@ -6,16 +7,16 @@ import { toE164 } from "./phone";
  * 것을 /sms/send 경로만 추가해서 재사용한다(같은 터널·시크릿).
  */
 export async function sendSms(phone: string, message: string): Promise<void> {
-  const gatewayUrl = process.env.OLLAMA_GATEWAY_URL;
-  const secret = process.env.OLLAMA_GATEWAY_SECRET;
-
-  if (!gatewayUrl || !secret) {
-    throw new Error(
-      "서버에 OLLAMA_GATEWAY_URL / OLLAMA_GATEWAY_SECRET 환경변수가 설정되어 있지 않아요."
-    );
+  const gateway = await getGateway();
+  if (!gateway) {
+    console.error("[sms] gateway not configured (OLLAMA_GATEWAY_SECRET / gateway url)");
+    throw new GatewayNotConfiguredError();
   }
+  const { url: gatewayUrl, secret } = gateway;
 
-  const res = await fetch(`${gatewayUrl.replace(/\/$/, "")}/sms/send`, {
+  let res: Response;
+  try {
+    res = await fetch(`${gatewayUrl}/sms/send`, {
     method: "POST",
     signal: AbortSignal.timeout(20000),
     headers: {
@@ -23,10 +24,16 @@ export async function sendSms(phone: string, message: string): Promise<void> {
       Authorization: `Bearer ${secret}`,
     },
     body: JSON.stringify({ phone: toE164(phone), message }),
-  });
+    });
+  } catch (e) {
+    // 맥미니가 꺼져 있거나 ngrok 주소가 바뀐 직후면 여기서 실패한다.
+    console.error("[sms] gateway unreachable:", e);
+    throw new Error("문자 발송 서버(맥미니)에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.");
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`SMS 발송 실패 (${res.status}): ${text}`);
+    console.error(`[sms] send failed ${res.status}: ${text}`);
+    throw new Error("문자를 보내지 못했어요. 잠시 후 다시 시도해 주세요.");
   }
 }
