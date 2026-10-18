@@ -61,6 +61,9 @@ export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
   return usePg ? pg.updateTeamLogo(teamId, logoUrl) : sqlite.updateTeamLogo(teamId, logoUrl);
 }
 
+export async function updateTeamName(teamId: number, name: string) {
+  return usePg ? pg.updateTeamName(teamId, name) : sqlite.updateTeamName(teamId, name);
+}
 export async function renameTeamSlug(teamId: number, newSlug: string) {
   return usePg ? pg.renameTeamSlug(teamId, newSlug) : sqlite.renameTeamSlug(teamId, newSlug);
 }

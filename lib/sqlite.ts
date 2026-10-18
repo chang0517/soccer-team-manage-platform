@@ -322,6 +322,10 @@ export function updateTeamLogo(teamId: number, logoUrl: string | null) {
   getDb().prepare("UPDATE teams SET logo_url=? WHERE id=?").run(logoUrl, teamId);
 }
 
+export function updateTeamName(teamId: number, name: string) {
+  getDb().prepare("UPDATE teams SET name=? WHERE id=?").run(name, teamId);
+}
+
 export function renameTeamSlug(teamId: number, newSlug: string) {
   getDb().prepare("UPDATE teams SET slug=? WHERE id=?").run(newSlug, teamId);
 }

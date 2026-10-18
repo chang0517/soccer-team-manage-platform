@@ -1,5 +1,5 @@
 self.addEventListener("push", (event) => {
-  let data = { title: "Raven FC", body: "새 소식이 있어요.", url: "/" };
+  let data = { title: "Team Manager", body: "새 소식이 있어요.", url: "/" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -8,8 +8,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "/icon.svg",
-      badge: "/icon.svg",
+      icon: "/icon-192.png",
+      badge: "/favicon-32.png",
       data: { url: data.url },
     })
   );

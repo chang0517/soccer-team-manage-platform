@@ -438,6 +438,11 @@ export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
   await pool.query("UPDATE teams SET logo_url=$1 WHERE id=$2", [logoUrl, teamId]);
 }
 
+export async function updateTeamName(teamId: number, name: string) {
+  const pool = await ready();
+  await pool.query("UPDATE teams SET name=$1 WHERE id=$2", [name, teamId]);
+}
+
 export async function renameTeamSlug(teamId: number, newSlug: string) {
   const pool = await ready();
   await pool.query("UPDATE teams SET slug=$1 WHERE id=$2", [newSlug, teamId]);

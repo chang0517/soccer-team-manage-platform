@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { useSession } from "@/components/useSession";
 
 // 큰 사진을 그대로 올리면 서버 쪽 800KB 캡에 걸리기 쉬워서, 올리기 전에
@@ -49,6 +50,8 @@ export default function AccountPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [logoError, setLogoError] = useState("");
+  const [teamName, setTeamName] = useState<string | null>(null);
+  const [nameSaving, setNameSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +72,28 @@ export default function AccountPage() {
       setLogoError(e instanceof Error ? e.message : "업로드에 실패했어요.");
     } finally {
       setLogoSaving(false);
+    }
+  };
+
+  const saveTeamName = async () => {
+    const name = (teamName ?? "").trim();
+    if (!name || name === user?.teamName) return;
+    setNameSaving(true);
+    try {
+      const res = await fetch("/api/teams/name", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "변경에 실패했어요.");
+      await refresh();
+      setTeamName(null);
+      toast.success(`팀 이름을 "${name}"(으)로 바꿨어요`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "변경에 실패했어요.");
+    } finally {
+      setNameSaving(false);
     }
   };
 
@@ -133,6 +158,33 @@ export default function AccountPage() {
           <Link href="/admin" className="block text-sm font-semibold text-blue-700">
             가입 승인 관리 →
           </Link>
+        </div>
+      )}
+
+      {user.role === "admin" && (
+        <div className="space-y-2 card p-4">
+          <div>
+            <p className="text-sm font-bold">팀 이름</p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              화면 상단과 브라우저 탭에 보이는 이름이에요. 로그인할 때 쓰는 팀 코드는 바뀌지 않아요.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              className={input}
+              value={teamName ?? user.teamName}
+              maxLength={40}
+              onChange={(e) => setTeamName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveTeamName()}
+            />
+            <button
+              onClick={saveTeamName}
+              disabled={nameSaving || !(teamName ?? "").trim() || teamName?.trim() === user.teamName}
+              className="shrink-0 rounded-xl bg-blue-700 px-4 text-sm font-bold text-white disabled:opacity-40"
+            >
+              {nameSaving ? "저장 중…" : "저장"}
+            </button>
+          </div>
         </div>
       )}
 
