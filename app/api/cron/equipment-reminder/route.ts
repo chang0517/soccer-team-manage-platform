@@ -1,5 +1,6 @@
 import { listEvents, listTeams, listUsersByStatus, updateEvent } from "@/lib/db";
 import { todayStr } from "@/lib/format";
+import { processMvpNotifications } from "@/lib/mvpNotify";
 import { sendPushToMember } from "@/lib/push";
 import { EQUIPMENT_REMINDER_DELAY_MINUTES, MATCH_DURATION_HOURS } from "@/lib/rules";
 
@@ -20,6 +21,10 @@ export async function GET() {
       listEvents(team.id),
       listUsersByStatus(team.id, "approved"),
     ]);
+    // 일정 목록 조회 때 놓친 MVP 투표 시작/발표 알림도 여기서 마저 보낸다.
+    await processMvpNotifications(team.id, events).catch((e) =>
+      console.error("[mvp] notify failed:", e)
+    );
     const adminMemberIds = [
       ...new Set(
         adminUsers

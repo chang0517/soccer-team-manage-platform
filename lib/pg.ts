@@ -15,6 +15,7 @@ import type {
   PollOption,
   PollVoteRow,
   PosGroup,
+  QuarterRecordEntry,
   RecordRow,
   ScoreRules,
   SquadData,
@@ -100,7 +101,9 @@ async function createTables(client: PoolClient) {
       water_duty TEXT NOT NULL DEFAULT '',
       icebox_duty TEXT NOT NULL DEFAULT '',
       record_log JSONB,
-      equipment_reminder_sent BOOLEAN NOT NULL DEFAULT false
+      equipment_reminder_sent BOOLEAN NOT NULL DEFAULT false,
+      mvp_open_notified BOOLEAN NOT NULL DEFAULT false,
+      mvp_result_notified BOOLEAN NOT NULL DEFAULT false
     );
     CREATE TABLE IF NOT EXISTS votes (
       team_id INTEGER NOT NULL,
@@ -238,12 +241,15 @@ async function createTables(client: PoolClient) {
   `);
 }
 
-const SCORE_COLUMNS: [string, number][] = [
-  ["score_participation", 1.5],
-  ["score_goal", 1.4],
-  ["score_assist", 1.25],
-  ["score_clean_defence", 1.25],
-  ["score_clean_dm", 0.625],
+// 테이블을 처음 만든 뒤에 추가된 컬럼들 — 예전 DB에는 ALTER로 붙인다.
+const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
+  ["teams", "score_participation", "DOUBLE PRECISION NOT NULL DEFAULT 1.5"],
+  ["teams", "score_goal", "DOUBLE PRECISION NOT NULL DEFAULT 1.4"],
+  ["teams", "score_assist", "DOUBLE PRECISION NOT NULL DEFAULT 1.25"],
+  ["teams", "score_clean_defence", "DOUBLE PRECISION NOT NULL DEFAULT 1.25"],
+  ["teams", "score_clean_dm", "DOUBLE PRECISION NOT NULL DEFAULT 0.625"],
+  ["events", "mvp_open_notified", "BOOLEAN NOT NULL DEFAULT false"],
+  ["events", "mvp_result_notified", "BOOLEAN NOT NULL DEFAULT false"],
 ];
 
 async function historicalPkHasYear(q: Pool | PoolClient): Promise<boolean> {
@@ -274,7 +280,7 @@ async function schemaUpToDate(pool: Pool): Promise<boolean> {
   return (
     TABLES.every((t) => tables.has(t)) &&
     cols.has("historical_stats.year") &&
-    SCORE_COLUMNS.every(([c]) => cols.has(`teams.${c}`)) &&
+    ADDED_COLUMNS.every(([t, c]) => cols.has(`${t}.${c}`)) &&
     (await historicalPkHasYear(pool))
   );
 }
@@ -307,10 +313,8 @@ async function init() {
         "ALTER TABLE historical_stats ADD PRIMARY KEY (team_id, member_id, year)"
       );
     }
-    for (const [col, def] of SCORE_COLUMNS) {
-      await client.query(
-        `ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col} DOUBLE PRECISION NOT NULL DEFAULT ${def}`
-      );
+    for (const [table, col, ddl] of ADDED_COLUMNS) {
+      await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
     }
     await client.query("COMMIT");
   } catch (e) {
@@ -555,6 +559,8 @@ type EventDbRow = {
   icebox_duty: string;
   record_log: EventItem["recordLog"];
   equipment_reminder_sent: boolean;
+  mvp_open_notified: boolean;
+  mvp_result_notified: boolean;
 };
 
 function toEvent(r: EventDbRow): EventItem {
@@ -577,6 +583,8 @@ function toEvent(r: EventDbRow): EventItem {
     iceboxDuty: r.icebox_duty,
     recordLog: r.record_log ?? null,
     equipmentReminderSent: r.equipment_reminder_sent,
+    mvpOpenNotified: r.mvp_open_notified,
+    mvpResultNotified: r.mvp_result_notified,
   };
 }
 
@@ -602,7 +610,14 @@ export async function createEvent(
   teamId: number,
   e: Omit<
     EventItem,
-    "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
+    | "id"
+    | "squad"
+    | "scrimmageSquad"
+    | "scored"
+    | "conceded"
+    | "equipmentReminderSent"
+    | "mvpOpenNotified"
+    | "mvpResultNotified"
   >
 ): Promise<EventItem> {
   const pool = await ready();
@@ -655,6 +670,63 @@ export async function updateEvent(teamId: number, id: number, patch: Partial<Eve
       teamId,
     ]
   );
+}
+
+/**
+ * 경기 기록 로그를 최신 값 기준으로 바꾼다. 행을 잠근(FOR UPDATE) 트랜잭션
+ * 안에서 읽고 쓰기 때문에, 여러 사람이 동시에 골을 추가해도 서로의 입력을
+ * 덮어쓰지 않는다. 기록 관련 세 컬럼만 건드려서 스쿼드 편집 등 다른 수정과도
+ * 부딪히지 않는다.
+ */
+export async function mutateEventRecordLog(
+  teamId: number,
+  id: number,
+  fn: (log: EventItem["recordLog"]) => {
+    scored: number | null;
+    conceded: number | null;
+    recordLog: QuarterRecordEntry[];
+  }
+): Promise<QuarterRecordEntry[] | null> {
+  const pool = await ready();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      "SELECT record_log FROM events WHERE id=$1 AND team_id=$2 FOR UPDATE",
+      [id, teamId]
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    const next = fn(rows[0].record_log ?? null);
+    await client.query(
+      "UPDATE events SET scored=$1, conceded=$2, record_log=$3 WHERE id=$4 AND team_id=$5",
+      [next.scored, next.conceded, JSON.stringify(next.recordLog), id, teamId]
+    );
+    await client.query("COMMIT");
+    return next.recordLog;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// 알림 플래그를 false→true로 바꾸는 데 성공한 호출만 true를 받는다 — 여러
+// 요청이 동시에 같은 알림을 보내려 해도 한 번만 나가게 하는 용도.
+export async function claimEventFlag(
+  teamId: number,
+  id: number,
+  flag: "mvp_open_notified" | "mvp_result_notified"
+): Promise<boolean> {
+  const pool = await ready();
+  const { rowCount } = await pool.query(
+    `UPDATE events SET ${flag}=true WHERE id=$1 AND team_id=$2 AND ${flag}=false`,
+    [id, teamId]
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 export async function deleteEvent(teamId: number, id: number) {
@@ -745,6 +817,9 @@ export async function saveRecords(teamId: number, eventId: number, records: Reco
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // 같은 경기의 기록을 동시에 다시 계산하면 DELETE/INSERT가 엇갈려 기본키
+    // 충돌이 날 수 있어서, 경기 단위로 한 번에 하나씩만 저장되게 한다.
+    await client.query("SELECT pg_advisory_xact_lock(727202, $1)", [eventId]);
     await client.query("DELETE FROM records WHERE event_id=$1 AND team_id=$2", [
       eventId,
       teamId,

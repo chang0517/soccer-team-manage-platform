@@ -17,6 +17,7 @@ import type {
   PollOption,
   PollVoteRow,
   PosGroup,
+  QuarterRecordEntry,
   RecordRow,
   ScoreRules,
   SquadData,
@@ -79,7 +80,9 @@ function createDb(): Database.Database {
       water_duty TEXT NOT NULL DEFAULT '',
       icebox_duty TEXT NOT NULL DEFAULT '',
       record_log TEXT,
-      equipment_reminder_sent INTEGER NOT NULL DEFAULT 0
+      equipment_reminder_sent INTEGER NOT NULL DEFAULT 0,
+      mvp_open_notified INTEGER NOT NULL DEFAULT 0,
+      mvp_result_notified INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS votes (
       team_id INTEGER NOT NULL,
@@ -435,6 +438,8 @@ type EventDbRow = {
   icebox_duty: string;
   record_log: string | null;
   equipment_reminder_sent: number;
+  mvp_open_notified: number;
+  mvp_result_notified: number;
 };
 
 function toEvent(r: EventDbRow): EventItem {
@@ -457,6 +462,8 @@ function toEvent(r: EventDbRow): EventItem {
     iceboxDuty: r.icebox_duty,
     recordLog: r.record_log ? (JSON.parse(r.record_log) as EventItem["recordLog"]) : null,
     equipmentReminderSent: !!r.equipment_reminder_sent,
+    mvpOpenNotified: !!r.mvp_open_notified,
+    mvpResultNotified: !!r.mvp_result_notified,
   };
 }
 
@@ -478,7 +485,14 @@ export function createEvent(
   teamId: number,
   e: Omit<
     EventItem,
-    "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
+    | "id"
+    | "squad"
+    | "scrimmageSquad"
+    | "scored"
+    | "conceded"
+    | "equipmentReminderSent"
+    | "mvpOpenNotified"
+    | "mvpResultNotified"
   >
 ): EventItem {
   const r = getDb()
@@ -531,6 +545,41 @@ export function updateEvent(teamId: number, id: number, patch: Partial<EventItem
       id,
       teamId
     );
+}
+
+// pg.ts의 같은 함수 설명 참고 — better-sqlite3는 동기라 트랜잭션 하나로 충분하다.
+export function mutateEventRecordLog(
+  teamId: number,
+  id: number,
+  fn: (log: EventItem["recordLog"]) => {
+    scored: number | null;
+    conceded: number | null;
+    recordLog: QuarterRecordEntry[];
+  }
+): QuarterRecordEntry[] | null {
+  const db = getDb();
+  return db.transaction(() => {
+    const row = db
+      .prepare("SELECT record_log FROM events WHERE id=? AND team_id=?")
+      .get(id, teamId) as { record_log: string | null } | undefined;
+    if (!row) return null;
+    const next = fn(row.record_log ? JSON.parse(row.record_log) : null);
+    db.prepare(
+      "UPDATE events SET scored=?, conceded=?, record_log=? WHERE id=? AND team_id=?"
+    ).run(next.scored, next.conceded, JSON.stringify(next.recordLog), id, teamId);
+    return next.recordLog;
+  })();
+}
+
+export function claimEventFlag(
+  teamId: number,
+  id: number,
+  flag: "mvp_open_notified" | "mvp_result_notified"
+): boolean {
+  const r = getDb()
+    .prepare(`UPDATE events SET ${flag}=1 WHERE id=? AND team_id=? AND ${flag}=0`)
+    .run(id, teamId);
+  return r.changes > 0;
 }
 
 export function deleteEvent(teamId: number, id: number) {

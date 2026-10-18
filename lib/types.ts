@@ -200,6 +200,10 @@ export interface EventItem {
   // 경기 종료(시작 시각 + MATCH_DURATION_HOURS) 시점 비품 담당자 입력 알림을
   // 이미 보냈는지. 크론이 매 실행마다 같은 경기에 중복 발송하지 않게 막는다.
   equipmentReminderSent: boolean;
+  // MVP 투표 시작(경기 종료) / 결과 발표(마감) 푸시를 이미 보냈는지.
+  // 같은 알림이 두 번 가지 않게 서버가 원자적으로 켠다(claimEventFlag).
+  mvpOpenNotified: boolean;
+  mvpResultNotified: boolean;
 }
 
 export interface VoteRow {

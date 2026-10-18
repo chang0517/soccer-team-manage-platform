@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
+import MvpHomeCard from "@/components/MvpHomeCard";
 import VoteButtons from "@/components/VoteButtons";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 import { haptic } from "@/components/ui/haptic";
@@ -296,6 +297,7 @@ export default function HomePage() {
           아직 멤버 프로필과 연결되지 않았어요. 운영진에게 연결을 요청해 주세요.
         </section>
       )}
+      {user && <MvpHomeCard />}
 
       {/* 다가오는 일정 */}
       <section>

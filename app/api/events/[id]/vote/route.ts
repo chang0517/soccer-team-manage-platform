@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/auth";
 import { deleteVote, getEvent, getVotes, setVote } from "@/lib/db";
+import { rebuildEventRecords } from "@/lib/recordSync";
 import { isVotingClosed } from "@/lib/rules";
 
 export async function POST(
@@ -53,5 +54,8 @@ export async function POST(
   } else {
     await setVote(session.teamId, eventId, Number(body.memberId), body.status);
   }
+  // 경기 기록이 이미 입력된 경기면 참석 명단 변화(뒤늦게 추가된 참석자 등)를
+  // 출전 기록에도 바로 반영한다.
+  await rebuildEventRecords(session.teamId, eventId);
   return Response.json({ ok: true });
 }

@@ -63,3 +63,17 @@ export async function sendPushToMember(
   const subs = (await getAllPushSubscriptions(teamId)).filter((s) => s.memberId === memberId);
   await sendTo(subs, payload);
 }
+
+// 여러 멤버(예: 그 경기 참석자 전원)의 구독 기기에 한 번에 보낸다.
+export async function sendPushToMembers(
+  teamId: number,
+  memberIds: number[],
+  payload: { title: string; body: string; url: string }
+) {
+  if (memberIds.length === 0) return;
+  const ids = new Set(memberIds);
+  const subs = (await getAllPushSubscriptions(teamId)).filter(
+    (s) => s.memberId != null && ids.has(s.memberId)
+  );
+  await sendTo(subs, payload);
+}

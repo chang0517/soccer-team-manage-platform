@@ -8,21 +8,22 @@ import type { DragEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TimePicker from "@/components/TimePicker";
+import MatchRecorder from "@/components/MatchRecorder";
+import MvpVoteSection from "@/components/MvpVoteSection";
 import VoteButtons from "@/components/VoteButtons";
 import { useSession } from "@/components/useSession";
 import { formatDate, dDayLabel } from "@/lib/format";
 import { WEATHER_EMOJI } from "@/lib/weather";
 import type { MatchWeather } from "@/lib/weather";
+import { normalizeRecordLog, summarizeRecordLog } from "@/lib/records";
 import { ATTEND_CAP, isVotingClosed } from "@/lib/rules";
 import {
   FORMATION_SLOTS,
   generateSquad,
   isSquadConfirmed,
-  QUARTER_COUNT,
   SLOT_CATEGORY_COLORS,
   SQUAD_APPROVAL_THRESHOLD,
   slotDisplayLabel,
-  slotFinalPosition,
   splitScrimmageTeams,
 } from "@/lib/squad";
 import { POS_CATEGORY, POS_CATEGORY_LABELS, POS_GROUPS } from "@/lib/types";
@@ -34,31 +35,12 @@ import type {
   PosCategory,
   PosGroup,
   QuarterRecordEntry,
-  RecordRow,
   SquadData,
   VoteRow,
   VoteStatus,
 } from "@/lib/types";
 
 const CATEGORY_ORDER: PosCategory[] = ["ATT", "MID", "DEF"];
-
-interface GoalEntryDraft {
-  key: string;
-  scorerId: string;
-  assistId: string;
-}
-
-interface QuarterRecordDraft {
-  scored: string;
-  conceded: string;
-  goals: GoalEntryDraft[];
-}
-
-let goalKeySeq = 0;
-const makeGoalKey = () => `g${++goalKeySeq}`;
-
-const emptyRecordQuarters = (): QuarterRecordDraft[] =>
-  Array.from({ length: QUARTER_COUNT }, () => ({ scored: "", conceded: "", goals: [] }));
 
 export default function EventDetailPage({
   params,
@@ -70,11 +52,9 @@ export default function EventDetailPage({
   const [event, setEvent] = useState<EventItem | null>(null);
   const [votes, setVotes] = useState<VoteRow[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [recordQuarters, setRecordQuarters] = useState<QuarterRecordDraft[]>(
-    emptyRecordQuarters()
+  const [recordLog, setRecordLog] = useState<QuarterRecordEntry[]>(() =>
+    normalizeRecordLog(null)
   );
-  const [recordQuarterIdx, setRecordQuarterIdx] = useState(0);
-  const [savedMsg, setSavedMsg] = useState("");
   const { user } = useSession();
   const myId = user?.memberId ?? null;
   const [activeQuarter, setActiveQuarter] = useState(0);
@@ -88,7 +68,6 @@ export default function EventDetailPage({
   }>({ name: "", pos1: "CB", pos2: "WB" });
   const [addingGuest, setAddingGuest] = useState(false);
   const [mvpVotes, setMvpVotes] = useState<MvpVoteRow[]>([]);
-  const [mvpPick, setMvpPick] = useState("");
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
@@ -113,24 +92,6 @@ export default function EventDetailPage({
     [members]
   );
 
-  // 스쿼드에 배정된 선수의 실제 포지션(전반/후반 하프 분할 포함). 경기 기록
-  // 저장 시 클린시트 보너스 계산용 position 필드를 채우는 데 쓴다.
-  const squadPositionByMember = useMemo(() => {
-    const map = new Map<number, string>();
-    if (event?.squad) {
-      for (const qs of event.squad.quarters) {
-        for (const s of qs.starters) {
-          for (const mid of [s.memberId, s.memberId2]) {
-            if (mid == null || map.has(mid)) continue;
-            const mem = members.find((m) => m.id === mid);
-            if (mem) map.set(mid, slotFinalPosition(s.slotId));
-          }
-        }
-      }
-    }
-    return map;
-  }, [event, members]);
-
   const load = useCallback(async () => {
     const [detail, mems, comms] = await Promise.all([
       fetch(`/api/events/${id}`).then((r) => r.json()),
@@ -145,21 +106,7 @@ export default function EventDetailPage({
     setComments(Array.isArray(comms) ? comms : []);
     setMembers(mems);
 
-    if (Array.isArray(ev.recordLog) && ev.recordLog.length > 0) {
-      setRecordQuarters(
-        ev.recordLog.map((q) => ({
-          scored: q.scored != null ? String(q.scored) : "",
-          conceded: q.conceded != null ? String(q.conceded) : "",
-          goals: q.goals.map((g) => ({
-            key: makeGoalKey(),
-            scorerId: g.scorerId != null ? String(g.scorerId) : "",
-            assistId: g.assistId != null ? String(g.assistId) : "",
-          })),
-        }))
-      );
-    } else {
-      setRecordQuarters(emptyRecordQuarters());
-    }
+    setRecordLog(normalizeRecordLog(ev.recordLog));
   }, [id]);
 
   useEffect(() => {
@@ -183,10 +130,21 @@ export default function EventDetailPage({
     loadWeather();
   }, [loadWeather]);
 
+  // 푸시·홈 카드에서 /events/:id#mvp로 들어오면, 화면이 다 그려진 뒤 MVP
+  // 투표로 스크롤한다(처음 로드 시점엔 섹션이 아직 없어서 브라우저가 못 찾음).
+  const eventLoaded = event != null;
+  useEffect(() => {
+    if (!eventLoaded || window.location.hash !== "#mvp") return;
+    const t = setTimeout(
+      () => document.getElementById("mvp")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350
+    );
+    return () => clearTimeout(t);
+  }, [eventLoaded]);
+
   if (!event) return <PageSkeleton />;
 
   const attendIds = votes.filter((v) => v.status === "attend").map((v) => v.memberId);
-  const amAttendee = myId != null && attendIds.includes(myId);
   const counts: Record<VoteStatus, number> = {
     attend: attendIds.length,
     maybe: votes.filter((v) => v.status === "maybe").length,
@@ -240,15 +198,6 @@ export default function EventDetailPage({
         ) || q.bench.some((mid) => statusOf(mid) === "absent")
     ) ?? false;
 
-  const mvpTally = (() => {
-    const counts = new Map<number, number>();
-    for (const v of mvpVotes) counts.set(v.voteeId, (counts.get(v.voteeId) ?? 0) + 1);
-    const max = Math.max(0, ...counts.values());
-    return [...counts.entries()]
-      .map(([memberId, count]) => ({ memberId, count, isLeader: count === max && max > 0 }))
-      .sort((a, b) => b.count - a.count);
-  })();
-  const myMvpVote = mvpVotes.find((v) => v.voterId === myId)?.voteeId ?? null;
 
   const quarterCounts = (() => {
     if (!currentSquad) return [] as { memberId: number; count: number }[];
@@ -273,73 +222,8 @@ export default function EventDetailPage({
       );
   })();
 
-  // 쿼터별 입력을 합산한 요약 — 미리보기와 저장 둘 다 이 값을 쓴다.
-  const recordSummary = (() => {
-    let scoredSum = 0;
-    let concededSum = 0;
-    let anyScored = false;
-    let anyConceded = false;
-    const goals = new Map<number, number>();
-    const assists = new Map<number, number>();
-    for (const q of recordQuarters) {
-      if (q.scored !== "") {
-        scoredSum += Number(q.scored) || 0;
-        anyScored = true;
-      }
-      if (q.conceded !== "") {
-        concededSum += Number(q.conceded) || 0;
-        anyConceded = true;
-      }
-      for (const g of q.goals) {
-        if (g.scorerId) {
-          const mid = Number(g.scorerId);
-          goals.set(mid, (goals.get(mid) ?? 0) + 1);
-        }
-        if (g.assistId) {
-          const mid = Number(g.assistId);
-          assists.set(mid, (assists.get(mid) ?? 0) + 1);
-        }
-      }
-    }
-    const attendedIds = new Set([...attendIds, ...goals.keys(), ...assists.keys()]);
-    return {
-      scored: anyScored ? scoredSum : null,
-      conceded: anyConceded ? concededSum : null,
-      goals,
-      assists,
-      attendedIds,
-    };
-  })();
-
-  // 쿼터별 실점 입력을 기준으로, 무실점인 쿼터에 뛴 GK·센터백·윙백·수미를
-  // 골/어시처럼 바로 보여준다 — 저장 전에도 어떤 클린시트가 반영될지 미리 확인 가능.
-  const quarterCleanSheetLines = (() => {
-    if (!event.squad) return [] as string[];
-    const lines: string[] = [];
-    recordQuarters.forEach((q, qi) => {
-      if (q.conceded === "" || Number(q.conceded) !== 0) return;
-      const quarterSquad = event.squad!.quarters[qi];
-      if (!quarterSquad) return;
-      const names: string[] = [];
-      for (const slot of quarterSquad.starters) {
-        const ids = [slot.memberId, slot.memberId2].filter(
-          (v): v is number => v != null
-        );
-        for (const mid of ids) {
-          const mem = memberById.get(mid);
-          if (!mem) continue;
-          const pos = slotFinalPosition(slot.slotId);
-          if (pos === "GK" || pos === "CB" || pos === "WB" || pos === "DM") {
-            names.push(mem.name);
-          }
-        }
-      }
-      if (names.length > 0) {
-        lines.push(`${qi + 1}쿼터 무실점 클린시트: ${names.join(", ")}`);
-      }
-    });
-    return lines;
-  })();
+  // 오늘 경기 개인 기록(골·어시) — MVP 후보 카드에 같이 보여준다.
+  const recordSummary = summarizeRecordLog(recordLog);
 
   // 낙관적 업데이트: 누르는 즉시 반영하고, 서버가 거절하면 되돌린다.
   const vote = async (status: VoteStatus) => {
@@ -667,91 +551,6 @@ export default function EventDetailPage({
     }
   };
 
-  const updateQuarterScore = (
-    qi: number,
-    patch: Partial<{ scored: string; conceded: string }>
-  ) =>
-    setRecordQuarters((qs) => qs.map((q, i) => (i === qi ? { ...q, ...patch } : q)));
-
-  const addGoal = (qi: number) =>
-    setRecordQuarters((qs) =>
-      qs.map((q, i) =>
-        i === qi
-          ? { ...q, goals: [...q.goals, { key: makeGoalKey(), scorerId: "", assistId: "" }] }
-          : q
-      )
-    );
-
-  const removeGoal = (qi: number, key: string) =>
-    setRecordQuarters((qs) =>
-      qs.map((q, i) => (i === qi ? { ...q, goals: q.goals.filter((g) => g.key !== key) } : q))
-    );
-
-  const updateGoal = (
-    qi: number,
-    key: string,
-    patch: Partial<{ scorerId: string; assistId: string }>
-  ) =>
-    setRecordQuarters((qs) =>
-      qs.map((q, i) =>
-        i === qi
-          ? { ...q, goals: q.goals.map((g) => (g.key === key ? { ...g, ...patch } : g)) }
-          : q
-      )
-    );
-
-  const saveRecords = async () => {
-    const records: Omit<RecordRow, "eventId">[] = [...recordSummary.attendedIds].map(
-      (mid) => ({
-        memberId: mid,
-        played: 1,
-        goals: recordSummary.goals.get(mid) ?? 0,
-        assists: recordSummary.assists.get(mid) ?? 0,
-        position:
-          (squadPositionByMember.get(mid) as PosGroup | undefined) ||
-          memberById.get(mid)?.pos1 ||
-          "",
-      })
-    );
-    const recordLog: QuarterRecordEntry[] = recordQuarters.map((q) => ({
-      scored: q.scored === "" ? null : Number(q.scored),
-      conceded: q.conceded === "" ? null : Number(q.conceded),
-      goals: q.goals
-        .filter((g) => g.scorerId || g.assistId)
-        .map((g) => ({
-          scorerId: g.scorerId ? Number(g.scorerId) : null,
-          assistId: g.assistId ? Number(g.assistId) : null,
-        })),
-    }));
-    await fetch(`/api/events/${id}/records`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scored: recordSummary.scored,
-        conceded: recordSummary.conceded,
-        records,
-        recordLog,
-      }),
-    });
-    setSavedMsg(
-      recordSummary.scored != null && recordSummary.conceded != null
-        ? `기록이 저장되고 최종 스코어 ${recordSummary.scored} : ${recordSummary.conceded}로 게시됐어요.`
-        : "기록이 저장됐어요."
-    );
-    setTimeout(() => setSavedMsg(""), 3000);
-    load();
-  };
-
-  const voteMvp = async () => {
-    if (!myId || !amAttendee || !mvpPick) return;
-    await fetch(`/api/events/${id}/mvp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voterId: myId, voteeId: Number(mvpPick) }),
-    });
-    load();
-  };
-
   const removeEvent = async () => {
     if (!(await confirmSheet({ title: "이 일정을 삭제할까요? 투표와 기록도 함께 삭제돼요.", destructive: true, confirmText: "삭제" }))) return;
     await fetch(`/api/events/${id}`, { method: "DELETE" });
@@ -846,9 +645,6 @@ export default function EventDetailPage({
       ids: byCat.get(c)!,
     }));
   };
-
-  const numInput =
-    "w-12 rounded-xl border border-zinc-200 bg-white px-1 py-1 text-center text-sm";
 
   return (
     <div className="space-y-6">
@@ -1623,17 +1419,16 @@ export default function EventDetailPage({
 
       {event.type === "match" && (
         <section className="card p-4">
-          <h2 className="mb-1 text-base font-bold">경기 기록</h2>
-          <p className="mb-3 text-xs text-zinc-400">
-            쿼터별로 스코어와 득점·어시스트를 입력하면 자동으로 합산돼서 최종
-            스코어와 개인 기록에 반영돼요. 참석 투표한 사람만 선택할 수
-            있어요 — 득점·어시가 없는 선수(예: 무실점 방어에 기여한
-            수비수·GK)도 출전·클린시트 점수를 받으려면 반드시 참석으로
-            등록돼 있어야 해요.
-          </p>
-
+          <MatchRecorder
+            eventId={Number(id)}
+            event={event}
+            members={members}
+            attendIds={attendIds}
+            recordLog={recordLog}
+            onRecordLogChange={setRecordLog}
+          />
           {isAdmin && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg bg-zinc-50 p-2">
+            <div className="mt-3 flex items-center gap-2 rounded-lg bg-zinc-50 p-2">
               <select
                 className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                 value={adminAddPick}
@@ -1660,211 +1455,22 @@ export default function EventDetailPage({
               </button>
             </div>
           )}
-
-          <div className="mb-3 grid grid-cols-4 gap-1.5">
-            {recordQuarters.map((_, qi) => (
-              <button
-                key={qi}
-                onClick={() => setRecordQuarterIdx(qi)}
-                className={`rounded-xl py-2 text-sm font-semibold ${
-                  recordQuarterIdx === qi
-                    ? "bg-blue-700 text-white"
-                    : "bg-zinc-100 text-zinc-600"
-                }`}
-              >
-                {qi + 1}쿼터
-              </button>
-            ))}
-          </div>
-
-          <div className="mb-3 flex items-center gap-3">
-            <label className="text-sm font-semibold">이 쿼터 득점</label>
-            <input
-              type="number"
-              min={0}
-              className={numInput}
-              value={recordQuarters[recordQuarterIdx].scored}
-              onChange={(e) =>
-                updateQuarterScore(recordQuarterIdx, { scored: e.target.value })
-              }
-            />
-            <label className="text-sm font-semibold">실점</label>
-            <input
-              type="number"
-              min={0}
-              className={numInput}
-              value={recordQuarters[recordQuarterIdx].conceded}
-              onChange={(e) =>
-                updateQuarterScore(recordQuarterIdx, { conceded: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            {recordQuarters[recordQuarterIdx].goals.length === 0 && (
-              <p className="text-xs text-zinc-400">
-                이 쿼터에 입력된 골이 없어요.
-              </p>
-            )}
-            {recordQuarters[recordQuarterIdx].goals.map((g) => (
-              <div key={g.key} className="flex items-center gap-2">
-                <select
-                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                  value={g.scorerId}
-                  onChange={(e) =>
-                    updateGoal(recordQuarterIdx, g.key, { scorerId: e.target.value })
-                  }
-                >
-                  <option value="">득점자 선택</option>
-                  {members
-                    .filter((m) => attendIds.includes(m.id))
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                        {m.isGuest ? " · 용병" : ""}
-                      </option>
-                    ))}
-                </select>
-                <select
-                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                  value={g.assistId}
-                  onChange={(e) =>
-                    updateGoal(recordQuarterIdx, g.key, { assistId: e.target.value })
-                  }
-                >
-                  <option value="">어시 없음</option>
-                  {members
-                    .filter((m) => attendIds.includes(m.id) && String(m.id) !== g.scorerId)
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                        {m.isGuest ? " · 용병" : ""}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  onClick={() => removeGoal(recordQuarterIdx, g.key)}
-                  className="shrink-0 text-xs text-red-500"
-                >
-                  삭제
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() => addGoal(recordQuarterIdx)}
-              className="w-full rounded-lg border border-dashed border-zinc-300 py-1.5 text-xs font-semibold text-blue-700"
-            >
-              + 이 쿼터에 골 추가
-            </button>
-          </div>
-
-          <div className="mt-4 rounded-xl bg-zinc-50 p-3 text-sm">
-            <p className="font-semibold text-zinc-600">
-              전체 합산 스코어: {recordSummary.scored ?? "?"} : {recordSummary.conceded ?? "?"}
-              {recordSummary.conceded === 0 && (
-                <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
-                  클린시트 → GK·센터백·윙백 1.25점, 수미 0.625점
-                </span>
-              )}
-            </p>
-            {recordSummary.goals.size > 0 && (
-              <p className="mt-1 text-xs text-zinc-500">
-                득점:{" "}
-                {[...recordSummary.goals.entries()]
-                  .map(([mid, n]) => `${memberById.get(mid)?.name ?? "?"} ${n}`)
-                  .join(", ")}
-              </p>
-            )}
-            {recordSummary.assists.size > 0 && (
-              <p className="mt-1 text-xs text-zinc-500">
-                어시스트:{" "}
-                {[...recordSummary.assists.entries()]
-                  .map(([mid, n]) => `${memberById.get(mid)?.name ?? "?"} ${n}`)
-                  .join(", ")}
-              </p>
-            )}
-            {quarterCleanSheetLines.map((line, i) => (
-              <p key={i} className="mt-1 text-xs text-sky-700">
-                {line}
-              </p>
-            ))}
-          </div>
-
-          <button
-            onClick={saveRecords}
-            className="mt-4 w-full rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20"
-          >
-            저장하고 게시
-          </button>
-          {savedMsg && (
-            <p className="mt-2 text-center text-sm font-semibold text-blue-700">
-              {savedMsg}
-            </p>
-          )}
         </section>
       )}
 
       {event.type === "match" && (
-        <section className="card p-4">
-          <h2 className="mb-3 text-lg font-extrabold tracking-tight">MVP 투표</h2>
-          <div className="flex gap-2">
-            <select
-              className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-              value={mvpPick || (myMvpVote != null ? String(myMvpVote) : "")}
-              onChange={(e) => setMvpPick(e.target.value)}
-              disabled={!myId || !amAttendee}
-            >
-              <option value="">투표할 선수 선택</option>
-              {members
-                .filter((m) => attendIds.includes(m.id) && m.id !== myId)
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                    {m.isGuest ? " · 용병" : ""}
-                  </option>
-                ))}
-            </select>
-            <button
-              onClick={voteMvp}
-              disabled={!myId || !amAttendee || !mvpPick}
-              className="rounded-full bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-md shadow-blue-700/20 disabled:opacity-40"
-            >
-              투표
-            </button>
-          </div>
-          {!myId && (
-            <p className="mt-2 text-xs text-zinc-400">
-              {user
-                ? "아직 멤버 프로필과 연결되지 않았어요."
-                : "투표하려면 먼저 로그인해 주세요."}
-            </p>
-          )}
-          {myId && !amAttendee && (
-            <p className="mt-2 text-xs text-zinc-400">
-              경기 참여자(참석 투표)만 MVP 투표를 할 수 있어요.
-            </p>
-          )}
-
-          {mvpTally.length > 0 && (
-            <div className="mt-4 space-y-1.5">
-              {mvpTally.map((t) => {
-                const m = memberById.get(t.memberId);
-                return (
-                  <div
-                    key={t.memberId}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    {t.isLeader && <span>🏆</span>}
-                    <span className={t.isLeader ? "font-bold" : ""}>
-                      {m?.name ?? "?"}
-                    </span>
-                    <span className="text-xs text-zinc-400">{t.count}표</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        <MvpVoteSection
+          eventId={Number(id)}
+          event={event}
+          members={members}
+          attendIds={attendIds}
+          myId={myId}
+          loggedIn={!!user}
+          mvpVotes={mvpVotes}
+          onMvpVotesChange={setMvpVotes}
+          goals={recordSummary.goals}
+          assists={recordSummary.assists}
+        />
       )}
     </div>
   );

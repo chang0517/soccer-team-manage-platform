@@ -1,12 +1,22 @@
 import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { createEvent, listEvents } from "@/lib/db";
+import { after } from "next/server";
 import { formatDate } from "@/lib/format";
+import { processMvpNotifications } from "@/lib/mvpNotify";
 import { sendPushToAll } from "@/lib/push";
 
 export async function GET() {
   const session = await getSessionUser();
   if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
-  return Response.json(await listEvents(session.teamId));
+  const events = await listEvents(session.teamId);
+  // 홈·일정 화면이 열릴 때마다 응답을 보낸 뒤 MVP 투표 시작/발표 알림을
+  // 보낼 때가 된 경기가 있는지 확인한다(하루 한 번 크론만으로는 늦어서).
+  after(() =>
+    processMvpNotifications(session.teamId, events).catch((e) =>
+      console.error("[mvp] notify failed:", e)
+    )
+  );
+  return Response.json(events);
 }
 
 export async function POST(request: Request) {

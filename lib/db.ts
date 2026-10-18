@@ -15,6 +15,7 @@ import type {
   PollOption,
   PollVoteRow,
   PosGroup,
+  QuarterRecordEntry,
   RecordRow,
   ScoreRules,
   TeamRow,
@@ -92,13 +93,40 @@ export async function createEvent(
   teamId: number,
   e: Omit<
     EventItem,
-    "id" | "squad" | "scrimmageSquad" | "scored" | "conceded" | "equipmentReminderSent"
+    | "id"
+    | "squad"
+    | "scrimmageSquad"
+    | "scored"
+    | "conceded"
+    | "equipmentReminderSent"
+    | "mvpOpenNotified"
+    | "mvpResultNotified"
   >
 ): Promise<EventItem> {
   return usePg ? pg.createEvent(teamId, e) : sqlite.createEvent(teamId, e);
 }
 export async function updateEvent(teamId: number, id: number, patch: Partial<EventItem>) {
   return usePg ? pg.updateEvent(teamId, id, patch) : sqlite.updateEvent(teamId, id, patch);
+}
+export async function mutateEventRecordLog(
+  teamId: number,
+  id: number,
+  fn: (log: EventItem["recordLog"]) => {
+    scored: number | null;
+    conceded: number | null;
+    recordLog: QuarterRecordEntry[];
+  }
+): Promise<QuarterRecordEntry[] | null> {
+  return usePg
+    ? pg.mutateEventRecordLog(teamId, id, fn)
+    : sqlite.mutateEventRecordLog(teamId, id, fn);
+}
+export async function claimEventFlag(
+  teamId: number,
+  id: number,
+  flag: "mvp_open_notified" | "mvp_result_notified"
+): Promise<boolean> {
+  return usePg ? pg.claimEventFlag(teamId, id, flag) : sqlite.claimEventFlag(teamId, id, flag);
 }
 export async function deleteEvent(teamId: number, id: number) {
   return usePg ? pg.deleteEvent(teamId, id) : sqlite.deleteEvent(teamId, id);
