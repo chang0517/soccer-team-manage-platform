@@ -111,81 +111,228 @@ export function categoryOf(pos: PosGroup): SlotCategory {
   return "FW"; // WG, ST
 }
 
-/**
- * 쿼터 하나의 스쿼드를 슬롯 단위로 채운다. 같은 카테고리(수비/미드필더/공격)
- * 안에서만 배치가 이루어지도록 고정한다 — 수비수가 공격 슬롯에, 공격수가
- * 수비 슬롯에 들어가는 일이 없다: 1차 1순위 포지션이 슬롯과 정확히
- * 일치하는 사람, 2차 2순위 포지션이 일치하는 사람, 3차 카테고리만
- * 같으면(예: CB가 WB 자리, AM이 DM 자리) 허용. 카테고리를 벗어나는
- * 배치는 하지 않는다 — 해당 카테고리에 뛸 사람이 부족하면 슬롯은 빈다.
- * 우선순위는 그 카테고리에서 지금까지 덜 뛴 사람 순 — 그래서 포지션마다
- * 쿼터 수는 달라도 "같은 포지션끼리는" 고르게 나뉜다.
- */
-function fillQuarter(
-  attendees: Member[],
-  catPlayCount: Map<string, number>
-): QuarterSquad {
-  const assigned = new Map<string, number>();
-  const used = new Set<number>();
-  const key = (memberId: number, cat: SlotCategory) => `${memberId}:${cat}`;
-  const countFor = (memberId: number, cat: SlotCategory) =>
-    catPlayCount.get(key(memberId, cat)) ?? 0;
+// 자동 배치에서 한 사람이 뛰는 최대 쿼터 수. 인원이 모자라도 이 이상은
+// 넣지 않고, 남는 자리는 빈칸으로 둔다(운영진이 직접 채우거나 "빈 자리
+// 자동 채우기"로 2순위 포지션 선수를 넣는다).
+export const MAX_AUTO_QUARTERS = 3;
 
-  const fill = (matches: (m: Member, slot: SlotDef) => boolean) => {
-    for (const slot of shuffle(FORMATION_SLOTS)) {
-      if (assigned.has(slot.id)) continue;
-      const candidates = shuffle(
-        attendees.filter((m) => !used.has(m.id) && matches(m, slot))
-      ).sort(
-        (a, b) => countFor(a.id, slot.category) - countFor(b.id, slot.category)
-      );
-      const pick = candidates[0];
-      if (pick) {
-        assigned.set(slot.id, pick.id);
-        used.add(pick.id);
-      }
+const LINES: SlotCategory[] = ["GK", "DF", "MF", "FW"];
+
+function subsets(k: number): number[][] {
+  const out: number[][] = [];
+  const walk = (from: number, cur: number[]) => {
+    if (cur.length === k) {
+      out.push(cur);
+      return;
     }
+    for (let q = from; q < QUARTER_COUNT; q++) walk(q + 1, [...cur, q]);
   };
+  walk(0, []);
+  return out;
+}
 
-  // slot.accepts는 겸업 조합(예: LW/RW가 WG·AM 겸용)을 허용하지만, 카테고리
-  // 자체를 넘나드는 겸업(AM=미드필더가 LW/RW=공격 자리에 들어가는 것)은
-  // 자동생성에서는 막는다 — 그래서 매 패스마다 카테고리 일치까지 같이 본다.
-  fill(
-    (m, slot) => slot.accepts.includes(m.pos1) && categoryOf(m.pos1) === slot.category
-  );
-  fill(
-    (m, slot) => slot.accepts.includes(m.pos2) && categoryOf(m.pos2) === slot.category
-  );
-  fill(
-    (m, slot) =>
-      categoryOf(m.pos1) === slot.category || categoryOf(m.pos2) === slot.category
-  );
-
-  for (const [slotId, memberId] of assigned) {
-    const slot = FORMATION_SLOTS.find((s) => s.id === slotId)!;
-    const k = key(memberId, slot.category);
-    catPlayCount.set(k, (catPlayCount.get(k) ?? 0) + 1);
+// 체력 안배: 두 쿼터는 1·3 / 2·4처럼 한 쿼터 쉬고 뛰게(1·4가 차선, 연속
+// 두 쿼터는 최후). 세 쿼터는 중간에 한 번 쉬는 쪽(1·2·4, 1·3·4)을 살짝만
+// 선호한다 — 빈자리가 한 쿼터에 몰리는 것보다는 덜 중요해서. 작을수록 좋다.
+function restPenalty(qs: number[]): number {
+  if (qs.length === 2) {
+    const gap = qs[1] - qs[0];
+    return gap === 2 ? 0 : gap === 3 ? 10 : 40;
   }
+  if (qs.length === 3) return qs[2] - qs[0] === 2 ? 3 : 0;
+  return 0;
+}
 
-  return {
-    starters: FORMATION_SLOTS.map((s) => ({
-      slotId: s.id,
-      memberId: assigned.get(s.id) ?? null,
-    })),
-    bench: attendees.filter((m) => !used.has(m.id)).map((m) => m.id),
-  };
+// 1순위 포지션마다 "자기 자리"로 보는 슬롯. 쿼터 수는 먼저 이 자리 수를
+// 기준으로 같은 포지션끼리 나누고, 남는 자리만 같은 라인 선수가 메운다.
+const OWN_SLOTS: Record<PosGroup, string[]> = {
+  GK: ["GK"],
+  CB: ["LCB", "RCB"],
+  WB: ["LB", "RB"],
+  DM: ["DM"],
+  AM: ["LCM", "RCM"],
+  WG: ["LW", "RW"],
+  ST: ["ST"],
+};
+
+function evenSplit(players: Member[], units: number, counts: Map<number, number>) {
+  if (players.length === 0) return;
+  const base = Math.floor(units / players.length);
+  const extra = units % players.length;
+  shuffle(players).forEach((m, i) => {
+    counts.set(m.id, Math.min(MAX_AUTO_QUARTERS, base + (i < extra ? 1 : 0)));
+  });
 }
 
 /**
- * 참석자를 포지션 선호도 기반으로 4쿼터 각각 독립된 스쿼드로 배치한다.
- * 카테고리(수비/미드필더/공격)별로 출전 횟수를 따로 세어, 쿼터가
- * 진행될수록 그 카테고리에서 아직 덜 뛴 참석자를 우선 배치한다.
+ * 한 라인(GK·수비·미드필더·공격) 안에서 각자 몇 쿼터를 뛸지 정한다.
+ * 1) 1순위 포지션별로 자기 자리 수 × 4쿼터를 그 포지션 인원에게 최대한
+ *    고르게 나눈다(인당 최대 MAX_AUTO_QUARTERS).
+ * 2) 그래도 남는 그 라인 자리(예: 윙어가 없어 비는 측면)는 같은 라인에서
+ *    덜 뛴 사람부터 한 쿼터씩 더 준다 — 역시 최대 MAX_AUTO_QUARTERS까지.
+ *    다 차도 남으면 빈칸으로 둔다.
+ */
+function lineQuarterCounts(players: Member[], lineSlots: number): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const pos of Object.keys(OWN_SLOTS) as PosGroup[]) {
+    evenSplit(
+      players.filter((m) => m.pos1 === pos),
+      OWN_SLOTS[pos].length * QUARTER_COUNT,
+      counts
+    );
+  }
+  let spare = lineSlots * QUARTER_COUNT - [...counts.values()].reduce((a, b) => a + b, 0);
+  while (spare > 0) {
+    const open = shuffle(players.filter((m) => (counts.get(m.id) ?? 0) < MAX_AUTO_QUARTERS));
+    if (open.length === 0) break;
+    const pick = open.sort((x, y) => (counts.get(x.id) ?? 0) - (counts.get(y.id) ?? 0))[0];
+    counts.set(pick.id, (counts.get(pick.id) ?? 0) + 1);
+    spare--;
+  }
+  return counts;
+}
+
+/**
+ * 정해진 쿼터 수대로 각자 어느 쿼터에 뛸지 고른다. 쿼터마다 그 라인 자리
+ * 수를 넘지 않게 하면서 (1) 빈자리가 생기면 한 쿼터에 몰리지 않게 — 앞서
+ * 배치한 다른 라인의 빈자리(holes)까지 합쳐서 쿼터마다 고르게 퍼뜨리고
+ * (2) 체력 안배 패턴을 최대한 지키고 (3) 같은 쿼터에 한 포지션이 자기 자리
+ * 수보다 많이 몰려 다른 자리로 밀려나는 일을 줄인다. 인원이 적어 경우의
+ * 수가 작으니 가지치기 탐색으로 가장 좋은 배치를 찾는다.
+ */
+function scheduleLine(
+  players: Member[],
+  counts: Map<number, number>,
+  cap: number,
+  holes: number[]
+): Map<number, number[]> {
+  const order = shuffle(players.filter((m) => (counts.get(m.id) ?? 0) > 0)).sort(
+    (a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0)
+  );
+  const options = order.map((m) =>
+    shuffle(subsets(counts.get(m.id)!)).sort((a, b) => restPenalty(a) - restPenalty(b))
+  );
+  const loads = new Array(QUARTER_COUNT).fill(0);
+  const posLoads = new Map<PosGroup, number[]>();
+  const pick: number[][] = [];
+  let best: { score: number; plan: number[][] } | null = null;
+  let nodes = 0;
+
+  const dfs = (i: number, penalty: number) => {
+    if (++nodes > 30000) return;
+    if (best && penalty >= best.score) return;
+    if (i === order.length) {
+      const spread = loads.reduce((sum, l, q) => sum + (holes[q] + cap - l) ** 2, 0);
+      const score = penalty + spread * 10;
+      if (!best || score < best.score) best = { score, plan: pick.map((p) => p.slice()) };
+      return;
+    }
+    const pos = order[i].pos1;
+    const own = OWN_SLOTS[pos].length;
+    if (!posLoads.has(pos)) posLoads.set(pos, new Array(QUARTER_COUNT).fill(0));
+    const pl = posLoads.get(pos)!;
+    for (const qs of options[i]) {
+      if (qs.some((q) => loads[q] >= cap)) continue;
+      // 자기 자리가 이미 다 찬 쿼터에 들어가면 다른 자리로 밀려나니 감점
+      const displaced = qs.filter((q) => pl[q] >= own).length;
+      qs.forEach((q) => {
+        loads[q]++;
+        pl[q]++;
+      });
+      pick[i] = qs;
+      dfs(i + 1, penalty + restPenalty(qs) + displaced * 15);
+      qs.forEach((q) => {
+        loads[q]--;
+        pl[q]--;
+      });
+    }
+  };
+  dfs(0, 0);
+
+  const plan = new Map<number, number[]>();
+  const found = best as { score: number; plan: number[][] } | null;
+  order.forEach((m, i) => plan.set(m.id, found?.plan[i] ?? []));
+  return plan;
+}
+
+/**
+ * 한 쿼터·한 라인에서 뛸 선수들을 그 라인의 자리에 앉힌다. 1순위 포지션에
+ * 맞는 자리 → 2순위 → 같은 라인 순으로, 앞 쿼터와 같은 자리면 조금 더
+ * 우선한다(쿼터마다 좌우가 바뀌지 않게). 자리가 남으면 빈칸으로 둔다.
+ */
+function seatLine(
+  slots: SlotDef[],
+  players: Member[],
+  prevSlot: Map<number, string>
+): Map<string, number> {
+  let best: { cost: number; seats: Map<string, number> } | null = null;
+  const used = new Set<string>();
+  const seats = new Map<string, number>();
+  const walk = (i: number, cost: number) => {
+    if (best && cost >= best.cost) return;
+    if (i === players.length) {
+      best = { cost, seats: new Map(seats) };
+      return;
+    }
+    const m = players[i];
+    for (const slot of slots) {
+      if (used.has(slot.id)) continue;
+      used.add(slot.id);
+      seats.set(slot.id, m.id);
+      const moved = prevSlot.has(m.id) && prevSlot.get(m.id) !== slot.id ? 1 : 0;
+      walk(i + 1, cost + slotFit(slot.id, m) * 10 + moved);
+      used.delete(slot.id);
+      seats.delete(slot.id);
+    }
+  };
+  walk(0, 0);
+  return (best as { cost: number; seats: Map<string, number> } | null)?.seats ?? new Map();
+}
+
+/**
+ * 참석자로 1~4쿼터 스쿼드를 자동 배치한다.
+ * - 1순위 포지션별로 인당 뛰는 쿼터 수를 최대한 고르게 나누고, 남는
+ *   자리는 같은 라인(GK·수비·미드필더·공격)에서 덜 뛴 사람이 메운다.
+ * - 두 쿼터를 뛰면 1·3 / 2·4쿼터처럼 쉬어가며 뛰게 한다.
+ * - 한 사람당 최대 3쿼터 — 그 라인 인원이 모자라면 남는 자리는 빈칸.
+ * - 다른 라인 선수로 빈자리를 메우지 않는다(수비수가 공격 자리에 가는 일 없음).
  */
 export function generateSquad(attendees: Member[]): SquadData {
-  const catPlayCount = new Map<string, number>();
+  const playQuarters = new Map<number, number[]>();
+  // 쿼터별로 지금까지 생긴 빈자리 수 — 자리가 많은 라인부터 배치하면서
+  // 다음 라인은 빈자리가 적은 쿼터 쪽에 자기 빈자리를 두게 한다.
+  const holes = new Array(QUARTER_COUNT).fill(0);
+  for (const line of ["DF", "MF", "FW", "GK"] as SlotCategory[]) {
+    const players = attendees.filter((m) => categoryOf(m.pos1) === line);
+    const cap = FORMATION_SLOTS.filter((s) => s.category === line).length;
+    const plan = scheduleLine(players, lineQuarterCounts(players, cap), cap, holes);
+    const loads = new Array(QUARTER_COUNT).fill(0);
+    for (const [id, qs] of plan) {
+      playQuarters.set(id, qs);
+      qs.forEach((q) => loads[q]++);
+    }
+    loads.forEach((l, q) => (holes[q] += cap - l));
+  }
+
+  const prevSlot = new Map<number, string>();
   const quarters: QuarterSquad[] = [];
   for (let q = 0; q < QUARTER_COUNT; q++) {
-    quarters.push(fillQuarter(attendees, catPlayCount));
+    const seat = new Map<string, number>();
+    for (const line of LINES) {
+      const slots = FORMATION_SLOTS.filter((s) => s.category === line);
+      const players = attendees.filter(
+        (m) => categoryOf(m.pos1) === line && playQuarters.get(m.id)?.includes(q)
+      );
+      for (const [slotId, id] of seatLine(slots, players, prevSlot)) {
+        seat.set(slotId, id);
+        prevSlot.set(id, slotId);
+      }
+    }
+    const on = new Set(seat.values());
+    quarters.push({
+      starters: FORMATION_SLOTS.map((s) => ({ slotId: s.id, memberId: seat.get(s.id) ?? null })),
+      bench: attendees.filter((m) => !on.has(m.id)).map((m) => m.id),
+    });
   }
   return { quarters, generatedAt: new Date().toISOString() };
 }

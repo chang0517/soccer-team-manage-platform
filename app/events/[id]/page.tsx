@@ -950,7 +950,7 @@ export default function EventDetailPage({
                   onClick={regenerate}
                   className="rounded-xl bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white"
                 >
-                  {currentSquad ? (isScrimmage ? "이 팀 다시 생성" : "다시 생성") : "자동 생성"}
+                  {currentSquad ? (isScrimmage ? "이 팀 다시 생성" : "다시 생성") : "스쿼드 만들기 시작"}
                 </button>
               )}
             </div>
@@ -979,6 +979,9 @@ export default function EventDetailPage({
             {isScrimmage
               ? "내전(자체 훈련) 모드예요. 참석자를 포지션 균형에 맞춰 두 팀으로 나눠서, 팀마다 포메이션·쿼터를 따로 관리해요."
               : "경기 3일 전이 되면 참석 투표 기준으로 쿼터별 스쿼드가 자동으로 만들어져요."}
+            {" "}자동 배치는 1순위 포지션별로 출전 쿼터를 고르게 나누고, 두 쿼터 뛰는
+            사람은 1·3 / 2·4쿼터로 쉬어가며 뛰게 해요. 한 사람은 최대 3쿼터까지만
+            넣고, 그래도 모자란 자리는 빈칸으로 둬요.
           </p>
 
           {currentSquad ? (
@@ -1036,8 +1039,8 @@ export default function EventDetailPage({
             </>
           ) : (
             <p className="rounded-2xl bg-zinc-50 p-5 text-center text-sm text-zinc-400">
-              아직 스쿼드가 없어요. 참석 투표가 모이면 자동 생성되거나, 위
-              버튼으로 바로 만들 수 있어요.
+              아직 스쿼드가 없어요. 경기 3일 전에 자동으로 만들어지고, 위
+              &lsquo;스쿼드 만들기 시작&rsquo;을 누르면 참석자로 바로 배치돼요.
             </p>
           )}
         </section>
