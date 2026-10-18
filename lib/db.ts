@@ -16,6 +16,7 @@ import type {
   PollVoteRow,
   PosGroup,
   RecordRow,
+  ScoreRules,
   TacticsJobRow,
   TacticsScene,
   TeamRow,
@@ -49,6 +50,11 @@ export async function updateTeamFineSettings(
   return usePg
     ? pg.updateTeamFineSettings(teamId, patch)
     : sqlite.updateTeamFineSettings(teamId, patch);
+}
+export async function updateTeamScoreRules(teamId: number, patch: Partial<ScoreRules>) {
+  return usePg
+    ? pg.updateTeamScoreRules(teamId, patch)
+    : sqlite.updateTeamScoreRules(teamId, patch);
 }
 export async function updateTeamLogo(teamId: number, logoUrl: string | null) {
   return usePg ? pg.updateTeamLogo(teamId, logoUrl) : sqlite.updateTeamLogo(teamId, logoUrl);

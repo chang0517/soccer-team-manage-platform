@@ -303,6 +303,9 @@ export default function AdminPage() {
           <Link href="/admin/members/import" className="font-semibold text-blue-700">
             멤버 일괄 등록 →
           </Link>
+          <Link href="/admin/settings" className="font-semibold text-blue-700">
+            팀 설정(벌금·점수 배율) →
+          </Link>
           <Link href="/admin/fines" className="font-semibold text-blue-700">
             이번 달 미투표자 →
           </Link>

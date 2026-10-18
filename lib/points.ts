@@ -1,5 +1,6 @@
 import { seasonOf } from "./season";
 import { QUARTER_COUNT, slotFinalPosition } from "./squad";
+import { DEFAULT_SCORE_RULES } from "./types";
 import type {
   EventItem,
   HistoricalStats,
@@ -8,17 +9,8 @@ import type {
   PosGroup,
   RankingRow,
   RecordRow,
+  ScoreRules,
 } from "./types";
-
-// 기존에 스프레드시트로 관리하던 시절 SCORE 공식(참여1.5·골1.4·어시1.25·클린1.25/0.625)을
-// 그대로 이어받아 적용한다. historical_stats(과거 누적) 값도 이 가중치 기준으로 저장된다.
-export const RULES = {
-  participation: 1.5, // 경기 출전 자체
-  goal: 1.4,
-  assist: 1.25,
-  cleanSheetDefence: 1.25, // GK · 센터백 · 윙백 (C(1) 풀 클린)
-  cleanSheetDm: 0.625, // 수비형 미드필더(수미) (C(0.5) 하프 클린)
-};
 
 const FIRE_STREAK_THRESHOLD = 3;
 
@@ -187,10 +179,13 @@ function aggregateHistorical(
 }
 
 /**
- * 점수 규칙: 출전 1.5점, 골 1.4점, 어시스트 1.25점.
- * 무실점(클린시트) 경기에 출전한 GK·센터백·윙백은 1.25점, 수미는 0.625점.
- * MVP 선정 횟수는 총점에는 반영하지 않고 별도로 집계한다.
- * historical(과거 스프레드시트 누적 기록)이 있으면 기준치로 더한다.
+ * 점수 규칙(rules)은 팀마다 다르게 설정할 수 있다 — 기본값은 기존에
+ * 스프레드시트로 관리하던 시절 SCORE 공식(참여1.5·골1.4·어시1.25·클린
+ * 1.25/0.625). MVP 선정 횟수는 총점에는 반영하지 않고 별도로 집계한다.
+ * historical(과거 스프레드시트 누적 기록)이 있으면 기준치로 더한다 —
+ * 이 값은 팀이 나중에 배율을 바꾸더라도 처음 저장될 때의 단가(기본값)
+ * 기준으로 이미 점수화돼 있으므로, 거꾸로 횟수를 구할 때도 항상 기본
+ * 단가로 나눈다(현재 배율로 나누면 예전 기록의 횟수가 틀어진다).
  * season을 지정하면 그 시즌(매년 12월 15일~다음해 12월 14일)의 경기·
  * 기록만으로 계산하고, null(기본값)이면 역대 전체를 합산한다.
  */
@@ -200,7 +195,8 @@ export function computeRanking(
   records: RecordRow[],
   mvpVotes: MvpVoteRow[] = [],
   historical: HistoricalStats[] = [],
-  season: number | null = null
+  season: number | null = null,
+  rules: ScoreRules = DEFAULT_SCORE_RULES
 ): RankingRow[] {
   const scopedEvents =
     season == null ? events : events.filter((e) => seasonOf(e.date) === season);
@@ -220,7 +216,7 @@ export function computeRanking(
       // 1.25점 → 1회). cleanPts는 그 원래 점수 그대로 시작값으로 둔다(단가가
       // 이미 적용된 값이라 다시 곱할 필요가 없다).
       const historicalCleanCount = h?.cleanPts
-        ? h.cleanPts / RULES.cleanSheetDefence
+        ? h.cleanPts / DEFAULT_SCORE_RULES.cleanSheetDefence
         : 0;
       return [
         m.id,
@@ -253,10 +249,10 @@ export function computeRanking(
     if (r.played && ev && !(ev.squad && ev.recordLog) && ev.conceded === 0) {
       if (r.position === "GK" || r.position === "CB" || r.position === "WB") {
         row.cleanCount += 1;
-        row.cleanPts += RULES.cleanSheetDefence;
+        row.cleanPts += rules.cleanSheetDefence;
       } else if (r.position === "DM") {
         row.cleanCount += 0.5;
-        row.cleanPts += RULES.cleanSheetDm;
+        row.cleanPts += rules.cleanSheetDm;
       }
     }
   }
@@ -270,7 +266,7 @@ export function computeRanking(
     const row = rows.get(memberId);
     if (row) {
       row.cleanCount += units;
-      row.cleanPts += units * (RULES.cleanSheetDefence / QUARTER_COUNT);
+      row.cleanPts += units * (rules.cleanSheetDefence / QUARTER_COUNT);
     }
   }
 
@@ -284,9 +280,9 @@ export function computeRanking(
     row.cleanCount = round3(row.cleanCount);
     row.cleanPts = round3(row.cleanPts);
     row.total = round3(
-      row.played * RULES.participation +
-        row.goals * RULES.goal +
-        row.assists * RULES.assist +
+      row.played * rules.participation +
+        row.goals * rules.goal +
+        row.assists * rules.assist +
         row.cleanPts +
         bonus
     );

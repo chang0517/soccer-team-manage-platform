@@ -18,6 +18,7 @@ import type {
   PollVoteRow,
   PosGroup,
   RecordRow,
+  ScoreRules,
   SquadData,
   TacticsJobRow,
   TacticsJobStatus,
@@ -45,6 +46,11 @@ function createDb(): Database.Database {
       logo_url TEXT,
       fine_account TEXT NOT NULL DEFAULT '',
       fine_amount TEXT NOT NULL DEFAULT '20,000원',
+      score_participation REAL NOT NULL DEFAULT 1.5,
+      score_goal REAL NOT NULL DEFAULT 1.4,
+      score_assist REAL NOT NULL DEFAULT 1.25,
+      score_clean_defence REAL NOT NULL DEFAULT 1.25,
+      score_clean_dm REAL NOT NULL DEFAULT 0.625,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS members (
@@ -240,6 +246,11 @@ type TeamDbRow = {
   logo_url: string | null;
   fine_account: string;
   fine_amount: string;
+  score_participation: number;
+  score_goal: number;
+  score_assist: number;
+  score_clean_defence: number;
+  score_clean_dm: number;
   created_at: string;
 };
 
@@ -251,6 +262,13 @@ function toTeam(r: TeamDbRow): TeamRow {
     logoUrl: r.logo_url,
     fineAccount: r.fine_account,
     fineAmount: r.fine_amount,
+    scoreRules: {
+      participation: r.score_participation,
+      goal: r.score_goal,
+      assist: r.score_assist,
+      cleanSheetDefence: r.score_clean_defence,
+      cleanSheetDm: r.score_clean_dm,
+    },
     createdAt: r.created_at,
   };
 }
@@ -291,6 +309,25 @@ export function updateTeamFineSettings(
   getDb()
     .prepare("UPDATE teams SET fine_account=?, fine_amount=? WHERE id=?")
     .run(patch.fineAccount ?? cur.fineAccount, patch.fineAmount ?? cur.fineAmount, teamId);
+}
+
+export function updateTeamScoreRules(teamId: number, patch: Partial<ScoreRules>) {
+  const cur = getTeamById(teamId);
+  if (!cur) return;
+  const rules = { ...cur.scoreRules, ...patch };
+  getDb()
+    .prepare(
+      `UPDATE teams SET score_participation=?, score_goal=?, score_assist=?,
+         score_clean_defence=?, score_clean_dm=? WHERE id=?`
+    )
+    .run(
+      rules.participation,
+      rules.goal,
+      rules.assist,
+      rules.cleanSheetDefence,
+      rules.cleanSheetDm,
+      teamId
+    );
 }
 
 export function updateTeamLogo(teamId: number, logoUrl: string | null) {

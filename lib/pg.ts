@@ -16,6 +16,7 @@ import type {
   PollVoteRow,
   PosGroup,
   RecordRow,
+  ScoreRules,
   SquadData,
   TacticsJobRow,
   TacticsJobStatus,
@@ -61,6 +62,11 @@ async function init() {
       logo_url TEXT,
       fine_account TEXT NOT NULL DEFAULT '',
       fine_amount TEXT NOT NULL DEFAULT '20,000원',
+      score_participation DOUBLE PRECISION NOT NULL DEFAULT 1.5,
+      score_goal DOUBLE PRECISION NOT NULL DEFAULT 1.4,
+      score_assist DOUBLE PRECISION NOT NULL DEFAULT 1.25,
+      score_clean_defence DOUBLE PRECISION NOT NULL DEFAULT 1.25,
+      score_clean_dm DOUBLE PRECISION NOT NULL DEFAULT 0.625,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS members (
@@ -252,6 +258,21 @@ async function init() {
   await pool.query(
     "ALTER TABLE historical_stats ADD PRIMARY KEY (team_id, member_id, year)"
   );
+  await pool.query(
+    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_participation DOUBLE PRECISION NOT NULL DEFAULT 1.5"
+  );
+  await pool.query(
+    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_goal DOUBLE PRECISION NOT NULL DEFAULT 1.4"
+  );
+  await pool.query(
+    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_assist DOUBLE PRECISION NOT NULL DEFAULT 1.25"
+  );
+  await pool.query(
+    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_clean_defence DOUBLE PRECISION NOT NULL DEFAULT 1.25"
+  );
+  await pool.query(
+    "ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_clean_dm DOUBLE PRECISION NOT NULL DEFAULT 0.625"
+  );
 }
 
 async function ready(): Promise<Pool> {
@@ -268,6 +289,11 @@ type TeamDbRow = {
   logo_url: string | null;
   fine_account: string;
   fine_amount: string;
+  score_participation: number;
+  score_goal: number;
+  score_assist: number;
+  score_clean_defence: number;
+  score_clean_dm: number;
   created_at: string;
 };
 
@@ -279,6 +305,13 @@ function toTeam(r: TeamDbRow): TeamRow {
     logoUrl: r.logo_url,
     fineAccount: r.fine_account,
     fineAmount: r.fine_amount,
+    scoreRules: {
+      participation: r.score_participation,
+      goal: r.score_goal,
+      assist: r.score_assist,
+      cleanSheetDefence: r.score_clean_defence,
+      cleanSheetDm: r.score_clean_dm,
+    },
     createdAt: r.created_at,
   };
 }
@@ -322,6 +355,25 @@ export async function updateTeamFineSettings(
     patch.fineAmount ?? cur.fineAmount,
     teamId,
   ]);
+}
+
+export async function updateTeamScoreRules(teamId: number, patch: Partial<ScoreRules>) {
+  const pool = await ready();
+  const cur = await getTeamById(teamId);
+  if (!cur) return;
+  const rules = { ...cur.scoreRules, ...patch };
+  await pool.query(
+    `UPDATE teams SET score_participation=$1, score_goal=$2, score_assist=$3,
+       score_clean_defence=$4, score_clean_dm=$5 WHERE id=$6`,
+    [
+      rules.participation,
+      rules.goal,
+      rules.assist,
+      rules.cleanSheetDefence,
+      rules.cleanSheetDm,
+      teamId,
+    ]
+  );
 }
 
 export async function updateTeamLogo(teamId: number, logoUrl: string | null) {

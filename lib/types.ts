@@ -1,3 +1,24 @@
+// 랭킹 점수 배율. 팀마다 선수단 성향이 달라서(예: 수비 중심 팀은 클린시트
+// 배율을 더 높이고 싶어할 수 있음) team별로 다르게 설정할 수 있다.
+export interface ScoreRules {
+  participation: number; // 경기 출전 자체
+  goal: number;
+  assist: number;
+  cleanSheetDefence: number; // GK · 센터백 · 윙백 (C(1) 풀 클린)
+  cleanSheetDm: number; // 수비형 미드필더(수미) (C(0.5) 하프 클린)
+}
+
+// 기존에 스프레드시트로 관리하던 시절 SCORE 공식(참여1.5·골1.4·어시1.25·클린1.25/0.625)
+// 그대로를 기본값으로 쓴다. historical_stats(과거 누적) 값도 이 기본 단가
+// 기준으로 저장돼 있어서, 팀이 배율을 바꾸지 않는 한 그대로 들어맞는다.
+export const DEFAULT_SCORE_RULES: ScoreRules = {
+  participation: 1.5,
+  goal: 1.4,
+  assist: 1.25,
+  cleanSheetDefence: 1.25,
+  cleanSheetDm: 0.625,
+};
+
 // 멀티테넌트: 한 앱을 여러 팀이 함께 쓴다. 모든 데이터 테이블은 team_id로
 // 스코프되고, 세션에 담긴 teamId가 모든 쿼리의 유일한 신뢰 출처다 —
 // 클라이언트가 다른 팀의 teamId를 보내도 서버는 세션의 teamId만 쓴다.
@@ -12,6 +33,7 @@ export interface TeamRow {
   logoUrl: string | null;
   fineAccount: string;
   fineAmount: string;
+  scoreRules: ScoreRules;
   createdAt: string;
 }
 
