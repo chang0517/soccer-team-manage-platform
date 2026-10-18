@@ -47,12 +47,16 @@ export default function Nav() {
                 className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/20"
               />
             ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-base ring-2 ring-white/20">
-                ⚽
-              </span>
+              // 팀 로고를 아직 안 올렸거나 로그인 전이면 앱 로고
+              // eslint-disable-next-line @next/next/no-img-element -- 작은 정적 아이콘
+              <img
+                src="/app-mark.png"
+                alt="Team Manager"
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+              />
             )}
             <span className="text-[17px] font-extrabold tracking-tight">
-              {user?.teamName || "TEAM MANAGE"}
+              {user?.teamName || "Team Manager"}
             </span>
           </Link>
           <div className="flex items-center gap-3">

@@ -6,7 +6,7 @@ import Providers from "@/components/ui/Providers";
 import { getSessionUser } from "@/lib/auth";
 import { getTeamById } from "@/lib/db";
 
-const DEFAULT_NAME = "Team Manage";
+const DEFAULT_NAME = "Team Manager";
 
 // 로그인된 팀 이름으로 탭 타이틀을 채운다. 로그아웃 상태(또는 세션 만료)
 // 에서는 특정 팀 이름을 노출할 수 없으니 범용 기본값으로 둔다 — 이 앱은

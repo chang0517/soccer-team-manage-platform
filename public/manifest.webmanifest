@@ -1,10 +1,10 @@
 {
-  "name": "Team Manage",
-  "short_name": "Team Manage",
+  "name": "Team Manager",
+  "short_name": "Team Manager",
   "description": "팀 일정·스쿼드·기록 관리",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fafafa",
+  "background_color": "#10151f",
   "theme_color": "#1e3a8a",
   "icons": [
     {
