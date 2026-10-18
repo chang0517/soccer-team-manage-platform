@@ -19,16 +19,27 @@ export interface StreakInfo {
   type: "goal" | "assist" | null;
 }
 
+// 내전·훈련처럼 상대팀과 붙는 정식 경기가 아닌 일정. 따로 일정 유형이
+// 없어서, 내전 모드(2팀 스쿼드)로 운영했거나 제목에 이런 말이 들어간
+// 일정을 그렇게 본다.
+const NON_OFFICIAL_TITLE = /내전|훈련|자체|연습|트레이닝/;
+
+export function isOfficialMatch(ev: EventItem): boolean {
+  return ev.type === "match" && !ev.scrimmageSquad && !NON_OFFICIAL_TITLE.test(ev.title);
+}
+
 /**
  * 각 선수가 실제로 출전한 경기들을 시간순으로 놓고, 가장 최근 경기부터
  * 거슬러 올라가며 "골을 넣은 경기"가 이어진 횟수와 "어시스트한 경기"가
  * 이어진 횟수를 각각 센다. 둘 중 하나라도 3경기 이상 이어지면 그 값을 반환한다.
+ * 내전·훈련은 연속 기록을 잇지도 끊지도 않도록 아예 건너뛴다 — 정식 경기
+ * 사이에 내전이 끼어 있어도 연속 골이 이어진다.
  */
 export function computeStreaks(
   events: EventItem[],
   records: RecordRow[]
 ): Map<number, StreakInfo> {
-  const eventById = new Map(events.map((e) => [e.id, e]));
+  const eventById = new Map(events.filter(isOfficialMatch).map((e) => [e.id, e]));
   const byMember = new Map<number, RecordRow[]>();
   for (const r of records) {
     if (!r.played || !eventById.has(r.eventId)) continue;
