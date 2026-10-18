@@ -26,27 +26,35 @@ export async function POST(request: Request) {
     );
   }
 
-  const team = await getTeamBySlug(teamSlug);
-  if (!team) {
-    return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
-  }
-  if (await getUserByUsername(team.id, username)) {
-    return Response.json({ error: "이미 사용 중인 아이디예요." }, { status: 409 });
-  }
+  try {
+    const team = await getTeamBySlug(teamSlug);
+    if (!team) {
+      return Response.json({ error: "팀 코드를 확인해 주세요." }, { status: 404 });
+    }
+    if (await getUserByUsername(team.id, username)) {
+      return Response.json({ error: "이미 사용 중인 아이디예요." }, { status: 409 });
+    }
 
-  const passwordHash = await hashPassword(password);
-  await createUser(team.id, {
-    username,
-    passwordHash,
-    displayName,
-    role: "player",
-    status: "pending",
-    memberId: null,
-    draftPos1: pos1,
-    draftPos2: pos2,
-    draftBackNo: backNo,
-    draftPhone: phone,
-  });
+    const passwordHash = await hashPassword(password);
+    await createUser(team.id, {
+      username,
+      passwordHash,
+      displayName,
+      role: "player",
+      status: "pending",
+      memberId: null,
+      draftPos1: pos1,
+      draftPos2: pos2,
+      draftBackNo: backNo,
+      draftPhone: phone,
+    });
 
-  return Response.json({ autoApproved: false });
+    return Response.json({ autoApproved: false });
+  } catch (e) {
+    console.error("POST /api/auth/signup failed", e);
+    return Response.json(
+      { error: e instanceof Error ? e.message : "가입에 실패했어요." },
+      { status: 500 }
+    );
+  }
 }
