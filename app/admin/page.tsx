@@ -300,6 +300,9 @@ export default function AdminPage() {
           <Link href="/members" className="font-semibold text-blue-700">
             선수 명단 관리 →
           </Link>
+          <Link href="/admin/members/import" className="font-semibold text-blue-700">
+            멤버 일괄 등록 →
+          </Link>
           <Link href="/admin/fines" className="font-semibold text-blue-700">
             이번 달 미투표자 →
           </Link>
