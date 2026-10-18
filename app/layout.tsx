@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import PushPrompt from "@/components/PushPrompt";
+import Providers from "@/components/ui/Providers";
 import { getSessionUser } from "@/lib/auth";
 import { getTeamById } from "@/lib/db";
 
@@ -39,6 +40,7 @@ export const viewport: Viewport = {
   themeColor: "#1e3a8a",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -48,12 +50,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="h-full antialiased">
+      <head>
+        {/* 한글 UI에 최적화된 Pretendard (실패하면 시스템 글꼴로 대체됨) */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
       <body className="min-h-full">
-        <Nav />
-        <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4 md:pb-10">
-          {children}
-        </main>
-        <PushPrompt />
+        <Providers>
+          <Nav />
+          <main className="mx-auto w-full max-w-3xl px-4 pb-28 pt-4 md:pb-10">
+            {children}
+          </main>
+          <PushPrompt />
+        </Providers>
       </body>
     </html>
   );

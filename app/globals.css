@@ -1,8 +1,69 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
+:root {
+  --app-bg: #f3f4f7;
+  --card-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.12);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  background: #fafafa;
+  background: var(--app-bg);
   color: #18181b;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+/* 눌렀을 때 살짝 들어가는 피드백 — 네이티브 앱처럼 손가락 아래에서 바로 반응하게 */
+.pressable {
+  transition: transform 120ms ease, background-color 150ms ease, color 150ms ease,
+    box-shadow 150ms ease, opacity 150ms ease;
+}
+.pressable:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.card {
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+}
+
+/* 스켈레톤 로딩 */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #e7e9ee;
+  border-radius: 0.75rem;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: skeleton-shimmer 1.3s infinite;
+}
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable:active:not(:disabled) {
+    transform: none;
+  }
+  .skeleton::after {
+    animation: none;
+  }
 }
 
 @media print {
