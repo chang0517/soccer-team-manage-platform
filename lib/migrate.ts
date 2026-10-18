@@ -19,6 +19,59 @@ function jsonb(v: unknown): string | null {
   return v == null ? null : JSON.stringify(v);
 }
 
+type Json = unknown;
+const asObj = (v: Json): Json => (typeof v === "string" ? JSON.parse(v) : v);
+
+// 일정 안에 JSON으로 들어 있는 선수 번호(스쿼드 배치·승인자, 쿼터별 득점자·
+// 어시)도 새 팀의 선수 번호로 바꿔야 한다 — 행 단위 외래키와 달리 놓치기
+// 쉬워서 따로 처리한다. 대응하는 선수가 없으면 빈 자리/득점자 미기록으로 둔다.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export function remapSquadIds(squad: Json, map: Map<number, number>): Json {
+  const sq = asObj(squad) as any;
+  if (!sq || !Array.isArray(sq.quarters)) return sq ?? null;
+  const m = (id: number | null | undefined) => (id == null ? null : (map.get(id) ?? null));
+  return {
+    ...sq,
+    quarters: sq.quarters.map((q: any) => ({
+      ...q,
+      starters: (q.starters ?? []).map((s: any) =>
+        s.memberId2 !== undefined
+          ? { ...s, memberId: m(s.memberId), memberId2: m(s.memberId2) }
+          : { ...s, memberId: m(s.memberId) }
+      ),
+      bench: (q.bench ?? []).map((id: number) => map.get(id)).filter((v: unknown) => v != null),
+    })),
+    ...(Array.isArray(sq.approvedBy)
+      ? { approvedBy: sq.approvedBy.map((id: number) => map.get(id)).filter((v: unknown) => v != null) }
+      : {}),
+  };
+}
+
+export function remapRecordLogIds(log: Json, map: Map<number, number>): Json {
+  const l = asObj(log) as any;
+  if (!Array.isArray(l)) return l ?? null;
+  const m = (id: number | null | undefined) => (id == null ? null : (map.get(id) ?? null));
+  return l.map((q: any) => ({
+    ...q,
+    goals: (q.goals ?? []).map((g: any) => ({ scorerId: m(g.scorerId), assistId: m(g.assistId) })),
+  }));
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// JSONB는 키 순서를 바꿔 저장하므로, 키를 정렬한 문자열로 같은 값인지 비교한다.
+function canonical(x: Json): string {
+  if (x === null || x === undefined || typeof x !== "object") return JSON.stringify(x ?? null);
+  if (Array.isArray(x)) return `[${x.map(canonical).join(",")}]`;
+  const o = x as Record<string, Json>;
+  return `{${Object.keys(o)
+    .filter((k) => o[k] !== undefined)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`)
+    .join(",")}}`;
+}
+// 컬럼이 문자열(JSON 텍스트)로 와도 같은 값으로 비교되게 맨 바깥만 풀어준다.
+const stable = (v: Json): string => canonical(asObj(v));
+
 async function tableExists(pool: Pool, name: string): Promise<boolean> {
   const { rows } = await pool.query(
     "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1",
@@ -133,14 +186,14 @@ export async function migrateTeamData(opts: {
           e.opponent ?? "",
           e.scored,
           e.conceded,
-          jsonb(e.squad),
-          jsonb(e.scrimmage_squad),
+          jsonb(remapSquadIds(e.squad, memberIdMap)),
+          jsonb(remapSquadIds(e.scrimmage_squad, memberIdMap)),
           e.notes ?? "",
           e.duty_offense ?? "",
           e.duty_defense ?? "",
           e.water_duty ?? "",
           e.icebox_duty ?? "",
-          jsonb(e.record_log),
+          jsonb(remapRecordLogIds(e.record_log, memberIdMap)),
           e.equipment_reminder_sent ?? false,
         ]
       );
@@ -396,5 +449,119 @@ export async function migrateTeamData(opts: {
   } finally {
     await srcPool.end().catch(() => {});
     await destPool.end().catch(() => {});
+  }
+}
+
+export interface RepairReport {
+  membersMatched: number;
+  membersTotal: number;
+  eventsMatched: number;
+  squadsFixed: number;
+  recordLogsFixed: number;
+}
+
+/**
+ * 예전 이관 도구는 일정 JSON(스쿼드·쿼터 기록) 안의 선수 번호를 바꾸지 않고
+ * 그대로 복사했다. 이미 이관된 팀을 원본 DB와 대조해서 바로잡는다.
+ * - 선수는 이름·등번호·포지션·용병 여부로 원본과 짝지어 번호 대응표를 만든다.
+ * - 일정은 날짜·시간·제목·유형·상대팀으로 짝짓는다.
+ * - 이관 뒤 플랫폼에서 바뀌지 않은(원본과 똑같은) JSON만 고친다 — 그래서
+ *   플랫폼에서 새로 짠 스쿼드는 건드리지 않고, 여러 번 실행해도 안전하다.
+ * 고친 쿼터 기록은 랭킹용 선수별 기록(records)도 다시 계산한다.
+ */
+export async function repairEventMemberIds(opts: {
+  sourceUrl: string;
+  teamId: number;
+}): Promise<RepairReport> {
+  const { rebuildEventRecords } = await import("./recordSync");
+  const mkPool = (url: string) =>
+    new Pool({
+      connectionString: url,
+      max: 4,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+      ssl: /supabase|sslmode=require/.test(url) ? { rejectUnauthorized: false } : undefined,
+    });
+  const srcPool = mkPool(opts.sourceUrl);
+  const destPool = mkPool(process.env.DATABASE_URL!);
+  try {
+    const memberKey = (m: { name: string; back_no: number | null; pos1: string; pos2: string; is_guest?: boolean }) =>
+      [m.name, m.back_no ?? "", m.pos1, m.pos2, m.is_guest ? 1 : 0].join("|");
+    const { rows: srcMembers } = await srcPool.query("SELECT * FROM members ORDER BY id");
+    const { rows: destMembers } = await destPool.query(
+      "SELECT * FROM members WHERE team_id=$1 ORDER BY id",
+      [opts.teamId]
+    );
+    const pool = new Map<string, number[]>();
+    for (const m of destMembers) {
+      const k = memberKey(m);
+      pool.set(k, [...(pool.get(k) ?? []), m.id]);
+    }
+    const map = new Map<number, number>();
+    for (const m of srcMembers) {
+      const ids = pool.get(memberKey(m));
+      if (ids?.length) map.set(m.id, ids.shift()!);
+    }
+
+    const eventKey = (e: { date: string; time: string | null; title: string; type: string; opponent: string | null }) =>
+      [e.date, e.time ?? "", e.title, e.type, e.opponent ?? ""].join("|");
+    const { rows: srcEvents } = await srcPool.query("SELECT * FROM events ORDER BY id");
+    const { rows: destEvents } = await destPool.query(
+      "SELECT * FROM events WHERE team_id=$1 ORDER BY id",
+      [opts.teamId]
+    );
+    const destByKey = new Map<string, typeof destEvents>();
+    for (const e of destEvents) {
+      const k = eventKey(e);
+      destByKey.set(k, [...(destByKey.get(k) ?? []), e]);
+    }
+
+    let eventsMatched = 0;
+    let squadsFixed = 0;
+    let recordLogsFixed = 0;
+    const rebuild: number[] = [];
+    for (const se of srcEvents) {
+      const de = destByKey.get(eventKey(se))?.shift();
+      if (!de) continue;
+      eventsMatched++;
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      for (const col of ["squad", "scrimmage_squad"] as const) {
+        const src = se[col] ?? null;
+        if (src == null || stable(src) !== stable(de[col] ?? null)) continue;
+        const fixed = remapSquadIds(src, map);
+        if (stable(fixed) === stable(src)) continue;
+        vals.push(JSON.stringify(fixed));
+        sets.push(`${col}=$${vals.length}::jsonb`);
+        squadsFixed++;
+      }
+      const srcLog = se.record_log ?? null;
+      if (srcLog != null && stable(srcLog) === stable(de.record_log ?? null)) {
+        const fixed = remapRecordLogIds(srcLog, map);
+        if (stable(fixed) !== stable(srcLog)) {
+          vals.push(JSON.stringify(fixed));
+          sets.push(`record_log=$${vals.length}::jsonb`);
+          recordLogsFixed++;
+          rebuild.push(de.id);
+        }
+      }
+      if (sets.length === 0) continue;
+      vals.push(de.id, opts.teamId);
+      await destPool.query(
+        `UPDATE events SET ${sets.join(", ")} WHERE id=$${vals.length - 1} AND team_id=$${vals.length}`,
+        vals
+      );
+    }
+    for (const id of rebuild) await rebuildEventRecords(opts.teamId, id);
+
+    return {
+      membersMatched: map.size,
+      membersTotal: srcMembers.length,
+      eventsMatched,
+      squadsFixed,
+      recordLogsFixed,
+    };
+  } finally {
+    await Promise.allSettled([srcPool.end(), destPool.end()]);
   }
 }

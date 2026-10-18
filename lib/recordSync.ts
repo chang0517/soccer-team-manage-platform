@@ -20,6 +20,9 @@ export async function rebuildEventRecords(teamId: number, eventId: number) {
 
   const { goals, assists } = summarizeRecordLog(normalizeRecordLog(event.recordLog));
   const memberById = new Map(members.map((m) => [m.id, m]));
+  // 쿼터 기록에 이 팀 명단에 없는 선수 번호가 있으면(예전 이관 데이터가 아직
+  // 복구되지 않은 경우) 다시 계산하면 골·어시가 사라지니 기존 기록을 그대로 둔다.
+  if ([...goals.keys(), ...assists.keys()].some((id) => !memberById.has(id))) return;
 
   // 클린시트 계산용 포지션: 스쿼드에 처음 배정된 자리의 수비 포지션, 없으면 1순위 포지션.
   const squadPos = new Map<number, RecordRow["position"]>();

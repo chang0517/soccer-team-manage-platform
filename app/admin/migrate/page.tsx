@@ -28,6 +28,17 @@ export default function MigrateTeamPage() {
   const [slugDrafts, setSlugDrafts] = useState<Record<number, string>>({});
   const [teamBusyId, setTeamBusyId] = useState<number | null>(null);
   const [teamsError, setTeamsError] = useState("");
+  const [repairTeamId, setRepairTeamId] = useState("");
+  const [repairUrl, setRepairUrl] = useState("");
+  const [repairing, setRepairing] = useState(false);
+  const [repairError, setRepairError] = useState("");
+  const [repairResult, setRepairResult] = useState<{
+    membersMatched: number;
+    membersTotal: number;
+    eventsMatched: number;
+    squadsFixed: number;
+    recordLogsFixed: number;
+  } | null>(null);
 
   const loadTeams = () =>
     fetch("/api/admin/teams")
@@ -54,6 +65,28 @@ export default function MigrateTeamPage() {
   }
 
   const input = "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
+
+  const repair = async () => {
+    if (!repairUrl.trim() || !repairTeamId) return;
+    setRepairing(true);
+    setRepairError("");
+    setRepairResult(null);
+    try {
+      const res = await fetch("/api/admin/repair-member-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: repairUrl.trim(), teamId: Number(repairTeamId) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `복구에 실패했어요. (status ${res.status})`);
+      setRepairResult(data);
+      setRepairUrl("");
+    } catch (e) {
+      setRepairError(e instanceof Error ? e.message : "복구에 실패했어요.");
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   const run = async () => {
     if (!sourceUrl.trim() || !teamSlug.trim() || !teamName.trim()) return;
@@ -211,6 +244,63 @@ export default function MigrateTeamPage() {
           </ul>
         </div>
       )}
+
+      <div className="mt-8 space-y-3 border-t border-zinc-200 pt-6">
+        <div>
+          <h2 className="mb-1 text-base font-bold">이관 데이터 복구 (선수 번호)</h2>
+          <p className="text-sm text-zinc-500">
+            예전에 이관한 팀은 일정 안의 스쿼드·쿼터별 기록이 원래 앱의 선수 번호를
+            그대로 가리키고 있어요(다른 사람으로 보이거나 화면이 깨짐). 원본 DB와
+            대조해 바로잡아요. 이관 뒤 이 앱에서 새로 짠 스쿼드·기록은 건드리지
+            않고, 여러 번 실행해도 안전해요.
+          </p>
+        </div>
+        <select
+          className={input}
+          value={repairTeamId}
+          onChange={(e) => setRepairTeamId(e.target.value)}
+        >
+          <option value="">복구할 팀 선택</option>
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.slug})
+            </option>
+          ))}
+        </select>
+        <textarea
+          className={`${input} h-20 font-mono text-xs`}
+          placeholder="그 팀 원본(예전 앱) DB 주소 — 이관할 때 넣었던 것과 같은 주소"
+          value={repairUrl}
+          onChange={(e) => setRepairUrl(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+        />
+        <button
+          onClick={repair}
+          disabled={repairing || !repairUrl.trim() || !repairTeamId}
+          className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-white disabled:opacity-40"
+        >
+          {repairing ? "복구 중…" : "선수 번호 복구"}
+        </button>
+        {repairError && (
+          <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{repairError}</p>
+        )}
+        {repairResult && (
+          <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+            <p className="font-bold">복구 완료</p>
+            <ul className="mt-1 space-y-0.5">
+              <li>선수 대조: {repairResult.membersMatched}/{repairResult.membersTotal}명</li>
+              <li>일정 대조: {repairResult.eventsMatched}건</li>
+              <li>고친 스쿼드: {repairResult.squadsFixed}건</li>
+              <li>고친 쿼터별 기록: {repairResult.recordLogsFixed}건</li>
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div className="mt-8 border-t border-zinc-200 pt-6">
         <h2 className="mb-1 text-base font-bold">팀 목록 / 코드 변경 · 삭제</h2>

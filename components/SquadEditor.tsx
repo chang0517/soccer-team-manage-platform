@@ -618,7 +618,8 @@ export default function SquadEditor({
               const colors = SLOT_CATEGORY_COLORS[slot.category];
               const ids = split ? [a?.memberId ?? null, a?.memberId2 ?? null] : [a?.memberId ?? null];
               const empty = ids.every((v) => v == null);
-              const offPos = ids.some((v) => v != null && slotFit(slot.id, memberById.get(v)!) >= 2);
+              // 명단에 없는 선수 번호(삭제된 선수 등)는 건너뛴다 — 화면이 깨지지 않게
+              const offPos = ids.some((v) => v != null && memberById.has(v) && slotFit(slot.id, memberById.get(v)!) >= 2);
               const mine = myId != null && ids.includes(myId);
               return (
                 <div
