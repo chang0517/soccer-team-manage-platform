@@ -18,9 +18,6 @@ import type {
   RecordRow,
   ScoreRules,
   SquadData,
-  TacticsJobRow,
-  TacticsJobStatus,
-  TacticsScene,
   TeamRow,
   UserRole,
   UserStatus,
@@ -233,18 +230,6 @@ async function init() {
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-    CREATE TABLE IF NOT EXISTS tactics_jobs (
-      id SERIAL PRIMARY KEY,
-      team_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      result JSONB,
-      error TEXT,
-      raw_response TEXT,
-      model TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
   `);
   // historical_stats가 예전에는 멤버당 한 줄(연도 구분 없음)이었다가
   // 연도별로 여러 줄을 가질 수 있도록 바뀌어서, 이미 만들어진 테이블에는
@@ -404,7 +389,6 @@ export async function deleteTeam(teamId: number) {
     "poll_options",
     "polls",
     "phone_verifications",
-    "tactics_jobs",
     "users",
     "events",
     "members",
@@ -967,100 +951,6 @@ export async function incrementPhoneVerificationAttempts(id: number) {
 export async function consumePhoneVerification(id: number) {
   const pool = await ready();
   await pool.query("UPDATE phone_verifications SET consumed=true WHERE id=$1", [id]);
-}
-
-// ---------- tactics jobs (전술 시뮬레이터 생성 작업) ----------
-function toTacticsJob(r: {
-  id: number;
-  user_id: number;
-  description: string;
-  status: TacticsJobStatus;
-  result: TacticsScene | null;
-  error: string | null;
-  raw_response: string | null;
-  model: string;
-  created_at: string;
-}): TacticsJobRow {
-  return {
-    id: r.id,
-    userId: r.user_id,
-    description: r.description,
-    status: r.status,
-    result: r.result,
-    error: r.error,
-    rawResponse: r.raw_response,
-    model: r.model,
-    createdAt: r.created_at,
-  };
-}
-
-export async function listTacticsJobs(teamId: number): Promise<TacticsJobRow[]> {
-  const pool = await ready();
-  const { rows } = await pool.query(
-    "SELECT * FROM tactics_jobs WHERE team_id=$1 ORDER BY created_at DESC",
-    [teamId]
-  );
-  return rows.map(toTacticsJob);
-}
-
-export async function createTacticsJob(
-  teamId: number,
-  userId: number,
-  description: string,
-  model: string
-): Promise<TacticsJobRow> {
-  const pool = await ready();
-  // 오래된 작업이 계속 쌓이지 않게, 새 작업을 만들 때마다 하루 지난 것들을 지운다.
-  await pool.query("DELETE FROM tactics_jobs WHERE created_at < now() - interval '1 day'");
-  const { rows } = await pool.query(
-    "INSERT INTO tactics_jobs (team_id, user_id, description, status, model) VALUES ($1, $2, $3, 'pending', $4) RETURNING *",
-    [teamId, userId, description, model]
-  );
-  return toTacticsJob(rows[0]);
-}
-
-export async function getTacticsJob(teamId: number, id: number): Promise<TacticsJobRow | null> {
-  const pool = await ready();
-  const { rows } = await pool.query(
-    "SELECT * FROM tactics_jobs WHERE id=$1 AND team_id=$2",
-    [id, teamId]
-  );
-  return rows[0] ? toTacticsJob(rows[0]) : null;
-}
-
-// pending 상태일 때만 갱신한다 — 사용자가 취소한 작업이 뒤늦게 끝나서
-// 결과를 덮어써버리는 걸 막는다.
-export async function completeTacticsJob(
-  id: number,
-  result: TacticsScene,
-  rawResponse: string | null
-) {
-  const pool = await ready();
-  await pool.query(
-    "UPDATE tactics_jobs SET status='done', result=$1, raw_response=$2 WHERE id=$3 AND status='pending'",
-    [JSON.stringify(result), rawResponse, id]
-  );
-}
-
-export async function failTacticsJob(id: number, error: string, rawResponse: string | null) {
-  const pool = await ready();
-  await pool.query(
-    "UPDATE tactics_jobs SET status='error', error=$1, raw_response=$2 WHERE id=$3 AND status='pending'",
-    [error, rawResponse, id]
-  );
-}
-
-export async function cancelTacticsJob(id: number) {
-  const pool = await ready();
-  await pool.query(
-    "UPDATE tactics_jobs SET status='cancelled' WHERE id=$1 AND status='pending'",
-    [id]
-  );
-}
-
-export async function deleteTacticsJob(teamId: number, id: number) {
-  const pool = await ready();
-  await pool.query("DELETE FROM tactics_jobs WHERE id=$1 AND team_id=$2", [id, teamId]);
 }
 
 // ---------- comments ----------

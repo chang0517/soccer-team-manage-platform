@@ -17,8 +17,6 @@ import type {
   PosGroup,
   RecordRow,
   ScoreRules,
-  TacticsJobRow,
-  TacticsScene,
   TeamRow,
   UserRole,
   UserStatus,
@@ -247,43 +245,6 @@ export async function consumePhoneVerification(id: number) {
   return usePg
     ? pg.consumePhoneVerification(id)
     : sqlite.consumePhoneVerification(id);
-}
-
-export async function listTacticsJobs(teamId: number): Promise<TacticsJobRow[]> {
-  return usePg ? pg.listTacticsJobs(teamId) : sqlite.listTacticsJobs(teamId);
-}
-export async function createTacticsJob(
-  teamId: number,
-  userId: number,
-  description: string,
-  model: string
-): Promise<TacticsJobRow> {
-  return usePg
-    ? pg.createTacticsJob(teamId, userId, description, model)
-    : sqlite.createTacticsJob(teamId, userId, description, model);
-}
-export async function getTacticsJob(teamId: number, id: number): Promise<TacticsJobRow | null> {
-  return usePg ? pg.getTacticsJob(teamId, id) : sqlite.getTacticsJob(teamId, id);
-}
-export async function completeTacticsJob(
-  id: number,
-  result: TacticsScene,
-  rawResponse: string | null
-) {
-  return usePg
-    ? pg.completeTacticsJob(id, result, rawResponse)
-    : sqlite.completeTacticsJob(id, result, rawResponse);
-}
-export async function failTacticsJob(id: number, error: string, rawResponse: string | null) {
-  return usePg
-    ? pg.failTacticsJob(id, error, rawResponse)
-    : sqlite.failTacticsJob(id, error, rawResponse);
-}
-export async function cancelTacticsJob(id: number) {
-  return usePg ? pg.cancelTacticsJob(id) : sqlite.cancelTacticsJob(id);
-}
-export async function deleteTacticsJob(teamId: number, id: number) {
-  return usePg ? pg.deleteTacticsJob(teamId, id) : sqlite.deleteTacticsJob(teamId, id);
 }
 
 export async function getComments(teamId: number, eventId: number): Promise<CommentRow[]> {

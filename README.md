@@ -4,7 +4,7 @@
 
 ## 현재 상태
 
-이 repo는 [Raven FC 팀 전용 앱](https://github.com/chang0517/soccer-team-manage)의 코드베이스를 베이스로 시작합니다. 일정·투표·스쿼드 자동 생성·경기 기록·랭킹·전술판 등 이미 검증된 기능을 그대로 재사용하되, 다음 방향으로 리팩터링하는 중입니다.
+이 repo는 [Raven FC 팀 전용 앱](https://github.com/chang0517/soccer-team-manage)의 코드베이스를 베이스로 시작합니다. 일정·투표·스쿼드 자동 생성·경기 기록·랭킹 등 이미 검증된 기능을 그대로 재사용하되, 다음 방향으로 리팩터링하는 중입니다.
 
 - **싱글테넌트 → 멀티테넌트**: 팀마다 레포를 복제하던 방식(Raven FC, Blum FC)을 버리고, `teams` 테이블 + 모든 데이터 테이블에 `team_id`를 붙이는 구조로 전환. 팀별 명단·운영진 화이트리스트·계좌 정보·브랜딩을 코드가 아니라 DB 행으로 관리.
 - **웹(PWA) → 네이티브 앱**: React Native 기반 iOS/Android 앱으로 클라이언트를 새로 만들고, 지금의 Next.js API routes를 그대로 백엔드로 재사용.

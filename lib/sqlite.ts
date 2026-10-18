@@ -20,9 +20,6 @@ import type {
   RecordRow,
   ScoreRules,
   SquadData,
-  TacticsJobRow,
-  TacticsJobStatus,
-  TacticsScene,
   TeamRow,
   UserRole,
   UserStatus,
@@ -217,18 +214,6 @@ function createDb(): Database.Database {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS tactics_jobs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      team_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      result TEXT,
-      error TEXT,
-      raw_response TEXT,
-      model TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL
-    );
   `);
   return db;
 }
@@ -353,7 +338,6 @@ export function deleteTeam(teamId: number) {
     "poll_options",
     "polls",
     "phone_verifications",
-    "tactics_jobs",
     "users",
     "events",
     "members",
@@ -882,103 +866,6 @@ export function incrementPhoneVerificationAttempts(id: number) {
 
 export function consumePhoneVerification(id: number) {
   getDb().prepare("UPDATE phone_verifications SET consumed=1 WHERE id=?").run(id);
-}
-
-// ---------- tactics jobs (전술 시뮬레이터 생성 작업) ----------
-type TacticsJobDbRow = {
-  id: number;
-  team_id: number;
-  user_id: number;
-  description: string;
-  status: TacticsJobStatus;
-  result: string | null;
-  error: string | null;
-  raw_response: string | null;
-  model: string;
-  created_at: string;
-};
-
-function toTacticsJob(r: TacticsJobDbRow): TacticsJobRow {
-  return {
-    id: r.id,
-    userId: r.user_id,
-    description: r.description,
-    status: r.status,
-    result: r.result ? (JSON.parse(r.result) as TacticsScene) : null,
-    error: r.error,
-    rawResponse: r.raw_response,
-    model: r.model,
-    createdAt: r.created_at,
-  };
-}
-
-export function listTacticsJobs(teamId: number): TacticsJobRow[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM tactics_jobs WHERE team_id=? ORDER BY created_at DESC")
-    .all(teamId) as TacticsJobDbRow[];
-  return rows.map(toTacticsJob);
-}
-
-export function createTacticsJob(
-  teamId: number,
-  userId: number,
-  description: string,
-  model: string
-): TacticsJobRow {
-  const db = getDb();
-  // 오래된 작업이 계속 쌓이지 않게, 새 작업을 만들 때마다 하루 지난 것들을 지운다.
-  db.prepare("DELETE FROM tactics_jobs WHERE created_at < ?").run(
-    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  );
-  const createdAt = new Date().toISOString();
-  const r = db
-    .prepare(
-      "INSERT INTO tactics_jobs (team_id, user_id, description, status, model, created_at) VALUES (?, ?, ?, 'pending', ?, ?)"
-    )
-    .run(teamId, userId, description, model, createdAt);
-  const row = db
-    .prepare("SELECT * FROM tactics_jobs WHERE id=?")
-    .get(Number(r.lastInsertRowid)) as TacticsJobDbRow;
-  return toTacticsJob(row);
-}
-
-export function getTacticsJob(teamId: number, id: number): TacticsJobRow | null {
-  const row = getDb()
-    .prepare("SELECT * FROM tactics_jobs WHERE id=? AND team_id=?")
-    .get(id, teamId) as TacticsJobDbRow | undefined;
-  return row ? toTacticsJob(row) : null;
-}
-
-// pending 상태일 때만 갱신한다 — 사용자가 취소한 작업이 뒤늦게 끝나서
-// 결과를 덮어써버리는 걸 막는다.
-export function completeTacticsJob(
-  id: number,
-  result: TacticsScene,
-  rawResponse: string | null
-) {
-  getDb()
-    .prepare(
-      "UPDATE tactics_jobs SET status='done', result=?, raw_response=? WHERE id=? AND status='pending'"
-    )
-    .run(JSON.stringify(result), rawResponse, id);
-}
-
-export function failTacticsJob(id: number, error: string, rawResponse: string | null) {
-  getDb()
-    .prepare(
-      "UPDATE tactics_jobs SET status='error', error=?, raw_response=? WHERE id=? AND status='pending'"
-    )
-    .run(error, rawResponse, id);
-}
-
-export function cancelTacticsJob(id: number) {
-  getDb()
-    .prepare("UPDATE tactics_jobs SET status='cancelled' WHERE id=? AND status='pending'")
-    .run(id);
-}
-
-export function deleteTacticsJob(teamId: number, id: number) {
-  getDb().prepare("DELETE FROM tactics_jobs WHERE id=? AND team_id=?").run(id, teamId);
 }
 
 // ---------- comments ----------

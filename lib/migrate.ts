@@ -389,30 +389,6 @@ export async function migrateTeamData(opts: {
     );
     counts.pollVotes = pollVotesToInsert.length;
 
-    // ---------- tactics_jobs (완료된 것만 — 중간에 멈춘 생성 작업은 의미 없음) ----------
-    const { rows: jobs } = await srcPool.query(
-      "SELECT * FROM tactics_jobs WHERE status='done' ORDER BY id"
-    );
-    const jobsToInsert = jobs.filter((j) => userIdMap.has(j.user_id));
-    await runConcurrent(jobsToInsert, (j) =>
-      destPool.query(
-        `INSERT INTO tactics_jobs (team_id, user_id, description, status, result, error, raw_response, model, created_at)
-         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9)`,
-        [
-          teamId,
-          userIdMap.get(j.user_id),
-          j.description,
-          j.status,
-          jsonb(j.result),
-          j.error,
-          j.raw_response,
-          j.model ?? "",
-          j.created_at,
-        ]
-      )
-    );
-    counts.tacticsJobs = jobsToInsert.length;
-
     // push_subscriptions, phone_verifications는 기기/세션에 종속된 일시 데이터라
     // 일부러 옮기지 않는다 — 새 팀에서는 다시 구독·인증하면 된다.
 
