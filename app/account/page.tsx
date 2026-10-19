@@ -273,6 +273,11 @@ export default function AccountPage() {
           {loading ? "변경 중…" : "비밀번호 변경"}
         </button>
       </div>
+      <p className="text-center">
+        <Link href="/about" className="text-sm font-semibold text-blue-700">
+          앱 기능 소개 보기
+        </Link>
+      </p>
     </div>
   );
 }

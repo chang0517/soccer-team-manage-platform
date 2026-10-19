@@ -272,6 +272,12 @@ export default function HomePage() {
             >
               새 팀 만들기
             </Link>
+            <Link
+              href="/about"
+              className="pressable rounded-full px-3 py-2 text-sm font-semibold text-blue-100 underline-offset-2 hover:underline"
+            >
+              기능 소개
+            </Link>
           </div>
         </motion.section>
       )}

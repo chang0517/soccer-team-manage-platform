@@ -113,6 +113,11 @@ export default function LoginPage() {
           새 팀 만들기
         </Link>
       </p>
+      <p className="text-center text-sm text-zinc-500">
+        <Link href="/about" className="font-semibold text-blue-700">
+          이 앱으로 뭘 할 수 있나요?
+        </Link>
+      </p>
     </div>
   );
 }
