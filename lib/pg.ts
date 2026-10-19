@@ -248,6 +248,7 @@ async function createTables(client: PoolClient) {
       open_time TEXT NOT NULL,
       lead_minutes INTEGER NOT NULL DEFAULT 60,
       target TEXT NOT NULL DEFAULT 'all',
+      member_ids TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -274,6 +275,7 @@ const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
   ["teams", "score_clean_dm", "DOUBLE PRECISION NOT NULL DEFAULT 0.625"],
   ["events", "mvp_open_notified", "BOOLEAN NOT NULL DEFAULT false"],
   ["teams", "calendar_token", "TEXT"],
+  ["team_reminders", "member_ids", "TEXT"],
   ["events", "mvp_result_notified", "BOOLEAN NOT NULL DEFAULT false"],
 ];
 
@@ -859,6 +861,15 @@ type ReminderDbRow = {
   open_time: string;
   lead_minutes: number;
   target: string;
+  member_ids: string | null;
+};
+const parseIds = (v: string | null): number[] => {
+  try {
+    const a = JSON.parse(v ?? "[]");
+    return Array.isArray(a) ? a.filter((n) => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
 };
 const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
   id: r.id,
@@ -867,7 +878,8 @@ const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
   dayOfMonth: r.day_of_month,
   openTime: r.open_time,
   leadMinutes: r.lead_minutes,
-  target: r.target === "admins" ? "admins" : "all",
+  target: r.target === "admins" || r.target === "members" ? r.target : "all",
+  memberIds: parseIds(r.member_ids),
 });
 
 export async function listReminders(teamId: number | null) {
@@ -881,10 +893,24 @@ export async function listReminders(teamId: number | null) {
 export async function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-    [teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target]
+    "INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target, member_ids) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+    [teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target, JSON.stringify(r.memberIds)]
   );
   return toReminder(rows[0]);
+}
+
+export async function updateReminderRecipients(
+  teamId: number,
+  id: number,
+  target: TeamReminder["target"],
+  memberIds: number[]
+) {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "UPDATE team_reminders SET target=$1, member_ids=$2 WHERE id=$3 AND team_id=$4 RETURNING *",
+    [target, JSON.stringify(memberIds), id, teamId]
+  );
+  return rows[0] ? toReminder(rows[0]) : null;
 }
 
 export async function deleteReminder(teamId: number, id: number) {

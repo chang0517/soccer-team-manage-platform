@@ -19,7 +19,9 @@ export async function processReminders(teamId?: number): Promise<number> {
       body: `오늘 ${openTimeLabel(r.openTime)}에 예약이 열려요. 미리 준비해 주세요!`,
       url: "/",
     };
-    if (r.target === "admins") {
+    if (r.target === "members") {
+      await sendPushToMembers(r.teamId, r.memberIds, payload);
+    } else if (r.target === "admins") {
       const admins = (await listUsersByStatus(r.teamId, "approved"))
         .filter((u) => u.role === "admin" && u.memberId != null)
         .map((u) => u.memberId as number);

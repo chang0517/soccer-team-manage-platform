@@ -158,6 +158,16 @@ export async function listReminders(teamId: number | null) {
 export async function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
   return usePg ? pg.createReminder(teamId, r) : sqlite.createReminder(teamId, r);
 }
+export async function updateReminderRecipients(
+  teamId: number,
+  id: number,
+  target: TeamReminder["target"],
+  memberIds: number[]
+) {
+  return usePg
+    ? pg.updateReminderRecipients(teamId, id, target, memberIds)
+    : sqlite.updateReminderRecipients(teamId, id, target, memberIds);
+}
 export async function deleteReminder(teamId: number, id: number) {
   return usePg ? pg.deleteReminder(teamId, id) : sqlite.deleteReminder(teamId, id);
 }

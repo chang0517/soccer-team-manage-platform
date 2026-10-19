@@ -226,7 +226,8 @@ function createDb(): Database.Database {
       day_of_month INTEGER NOT NULL,
       open_time TEXT NOT NULL,
       lead_minutes INTEGER NOT NULL DEFAULT 60,
-      target TEXT NOT NULL DEFAULT 'all'
+      target TEXT NOT NULL DEFAULT 'all',
+      member_ids TEXT
     );
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -239,6 +240,11 @@ function createDb(): Database.Database {
       PRIMARY KEY (reminder_id, period)
     );
   `);
+  // 예전에 만들어진 로컬 DB에는 나중에 추가한 컬럼을 붙여준다.
+  const reminderCols = db.prepare("PRAGMA table_info(team_reminders)").all() as { name: string }[];
+  if (!reminderCols.some((c) => c.name === "member_ids")) {
+    db.exec("ALTER TABLE team_reminders ADD COLUMN member_ids TEXT");
+  }
   return db;
 }
 
@@ -685,6 +691,15 @@ type ReminderDbRow = {
   open_time: string;
   lead_minutes: number;
   target: string;
+  member_ids: string | null;
+};
+const parseIds = (v: string | null): number[] => {
+  try {
+    const a = JSON.parse(v ?? "[]");
+    return Array.isArray(a) ? a.filter((n) => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
 };
 const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
   id: r.id,
@@ -693,7 +708,8 @@ const toReminder = (r: ReminderDbRow): TeamReminder & { teamId: number } => ({
   dayOfMonth: r.day_of_month,
   openTime: r.open_time,
   leadMinutes: r.lead_minutes,
-  target: r.target === "admins" ? "admins" : "all",
+  target: r.target === "admins" || r.target === "members" ? r.target : "all",
+  memberIds: parseIds(r.member_ids),
 });
 
 export function listReminders(teamId: number | null) {
@@ -707,9 +723,28 @@ export function listReminders(teamId: number | null) {
 export function createReminder(teamId: number, r: Omit<TeamReminder, "id">) {
   const db = getDb();
   const info = db
-    .prepare("INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target) VALUES (?,?,?,?,?,?)")
-    .run(teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target);
+    .prepare("INSERT INTO team_reminders (team_id, title, day_of_month, open_time, lead_minutes, target, member_ids) VALUES (?,?,?,?,?,?,?)")
+    .run(teamId, r.title, r.dayOfMonth, r.openTime, r.leadMinutes, r.target, JSON.stringify(r.memberIds));
   return toReminder(db.prepare("SELECT * FROM team_reminders WHERE id=?").get(Number(info.lastInsertRowid)) as ReminderDbRow);
+}
+
+export function updateReminderRecipients(
+  teamId: number,
+  id: number,
+  target: TeamReminder["target"],
+  memberIds: number[]
+) {
+  const db = getDb();
+  db.prepare("UPDATE team_reminders SET target=?, member_ids=? WHERE id=? AND team_id=?").run(
+    target,
+    JSON.stringify(memberIds),
+    id,
+    teamId
+  );
+  const row = db.prepare("SELECT * FROM team_reminders WHERE id=? AND team_id=?").get(id, teamId) as
+    | ReminderDbRow
+    | undefined;
+  return row ? toReminder(row) : null;
 }
 
 export function deleteReminder(teamId: number, id: number) {

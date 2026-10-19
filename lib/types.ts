@@ -188,7 +188,9 @@ export interface TeamReminder {
   dayOfMonth: number;
   openTime: string; // "HH:MM" (한국 시간)
   leadMinutes: number;
-  target: "all" | "admins";
+  // all=팀원 전체, admins=운영진만, members=memberIds로 고른 사람들만
+  target: "all" | "admins" | "members";
+  memberIds: number[];
 }
 
 export interface EventItem {
