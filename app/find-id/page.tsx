@@ -1,9 +1,9 @@
 "use client";
 
 import AuthHeader from "@/components/ui/AuthHeader";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
+import TeamPicker from "@/components/TeamPicker";
 
 export default function FindIdPage() {
   const [step, setStep] = useState<"phone" | "code" | "result">("phone");
@@ -13,10 +13,6 @@ export default function FindIdPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [usernames, setUsernames] = useState<string[]>([]);
-
-  useEffect(() => {
-    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
-  }, []);
 
   const input =
     "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
@@ -81,13 +77,12 @@ export default function FindIdPage() {
       <AuthHeader title="아이디 찾기" />
       <div className="space-y-3 card p-4">
         <div>
-          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
-          <input
-            className={input}
-            value={teamSlug}
-            onChange={(e) => setTeamSlug(e.target.value)}
-            disabled={step === "code"}
-          />
+          <label className="text-xs font-semibold text-zinc-500">팀 선택</label>
+          <div className="mt-1.5">
+            <div className={step === "code" ? "pointer-events-none opacity-60" : ""}>
+              <TeamPicker value={teamSlug} onChange={setTeamSlug} />
+            </div>
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">휴대폰 번호</label>

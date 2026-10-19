@@ -1,9 +1,9 @@
 "use client";
 
 import AuthHeader from "@/components/ui/AuthHeader";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
+import TeamPicker from "@/components/TeamPicker";
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<"username" | "code" | "result">("username");
@@ -14,10 +14,6 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tempPassword, setTempPassword] = useState("");
-
-  useEffect(() => {
-    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
-  }, []);
 
   const input =
     "w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm";
@@ -88,13 +84,12 @@ export default function ResetPasswordPage() {
       <AuthHeader title="비밀번호 찾기" />
       <div className="space-y-3 card p-4">
         <div>
-          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
-          <input
-            className={input}
-            value={teamSlug}
-            onChange={(e) => setTeamSlug(e.target.value)}
-            disabled={step === "code"}
-          />
+          <label className="text-xs font-semibold text-zinc-500">팀 선택</label>
+          <div className="mt-1.5">
+            <div className={step === "code" ? "pointer-events-none opacity-60" : ""}>
+              <TeamPicker value={teamSlug} onChange={setTeamSlug} />
+            </div>
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">아이디</label>

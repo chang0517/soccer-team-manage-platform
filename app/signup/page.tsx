@@ -1,8 +1,9 @@
 "use client";
 
 import AuthHeader from "@/components/ui/AuthHeader";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import TeamPicker from "@/components/TeamPicker";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 import { POS_GROUPS, POS_LABELS } from "@/lib/types";
 import type { PosGroup } from "@/lib/types";
@@ -19,10 +20,6 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingMsg, setPendingMsg] = useState("");
-
-  useEffect(() => {
-    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
-  }, []);
 
   const submit = async () => {
     if (
@@ -92,13 +89,10 @@ export default function SignupPage() {
       <AuthHeader title="가입하기" />
       <div className="space-y-3 card p-4">
         <div>
-          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
-          <input
-            className={input}
-            placeholder="운영진에게 받은 팀 코드"
-            value={teamSlug}
-            onChange={(e) => setTeamSlug(e.target.value)}
-          />
+          <label className="text-xs font-semibold text-zinc-500">팀 선택</label>
+          <div className="mt-1.5">
+            <TeamPicker value={teamSlug} onChange={setTeamSlug} />
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">이름</label>

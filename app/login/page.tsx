@@ -1,10 +1,11 @@
 "use client";
 
 import AuthHeader from "@/components/ui/AuthHeader";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { notifySessionChanged } from "@/components/useSession";
+import TeamPicker from "@/components/TeamPicker";
 import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 export default function LoginPage() {
@@ -14,10 +15,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setTeamSlug(localStorage.getItem(TEAM_SLUG_KEY) ?? "");
-  }, []);
 
   const submit = async () => {
     if (!teamSlug.trim() || !username.trim() || !password) return;
@@ -62,14 +59,10 @@ export default function LoginPage() {
       <AuthHeader title="로그인" />
       <div className="space-y-3 card p-4">
         <div>
-          <label className="text-xs font-semibold text-zinc-500">팀 코드</label>
-          <input
-            className={input}
-            value={teamSlug}
-            onChange={(e) => setTeamSlug(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="예: raven-fc"
-          />
+          <label className="text-xs font-semibold text-zinc-500">팀 선택</label>
+          <div className="mt-1.5">
+            <TeamPicker value={teamSlug} onChange={setTeamSlug} />
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold text-zinc-500">아이디</label>
