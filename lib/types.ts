@@ -117,6 +117,9 @@ export interface SessionUser {
   displayName: string;
   role: UserRole;
   memberId: number | null;
+  // 플랫폼 마스터가 다른 팀을 "방문" 중일 때만 있다. 마스터 본인 계정(원래 팀·
+  // 사용자 번호)을 가리키고, 이때 id는 항상 -1(그 팀에 없는 가상 사용자)이다.
+  masterOf?: { teamId: number; id: number };
 }
 
 // 아이디/비밀번호 찾기용 휴대폰 SMS 인증번호.

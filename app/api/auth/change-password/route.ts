@@ -7,6 +7,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   }
 
+  if (session.masterOf) {
+    return Response.json(
+      { error: "마스터 방문 중에는 비밀번호를 바꿀 수 없어요. 내 팀으로 돌아가서 바꿔 주세요." },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json();
   const currentPassword = String(body?.currentPassword ?? "");
   const newPassword = String(body?.newPassword ?? "");

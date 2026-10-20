@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { cookies, headers } from "next/headers";
-import { getUserById } from "./db";
+import { getTeamById, getUserById } from "./db";
+import { isMasterAccount } from "./master";
 import type { SessionUser } from "./types";
 
 const SESSION_COOKIE = "raven_session";
@@ -48,6 +49,11 @@ export function parseSessionToken(token: string | undefined | null): SessionUser
       displayName: data.displayName,
       role: data.role,
       memberId: data.memberId ?? null,
+      ...(data.masterOf &&
+      Number.isInteger(data.masterOf.teamId) &&
+      Number.isInteger(data.masterOf.id)
+        ? { masterOf: { teamId: data.masterOf.teamId, id: data.masterOf.id } }
+        : {}),
     };
   } catch {
     return null;
@@ -92,7 +98,31 @@ export async function clearSessionCookie() {
 export async function requireAdmin(): Promise<SessionUser | null> {
   const session = await getSessionUser();
   if (!session) return null;
+  // 마스터가 다른 팀을 방문 중이면, 그 팀에 계정이 없어도 마스터 본인 계정이
+  // 아직 유효할 때 운영진으로 인정한다.
+  if (session.masterOf) {
+    const [ok, team] = await Promise.all([
+      isMasterAccount(session.masterOf.teamId, session.masterOf.id),
+      getTeamById(session.teamId),
+    ]);
+    return ok && team ? session : null;
+  }
   const user = await getUserById(session.teamId, session.id);
   if (!user || user.status !== "approved" || user.role !== "admin") return null;
   return session;
+}
+
+/**
+ * 마스터 전용 API 가드. 방문 중이든 아니든 "진짜 내 계정"(방문 중이면 원래
+ * 계정)이 마스터 목록에 있어야 한다. origin은 그 진짜 계정이다.
+ */
+export async function requireMaster(): Promise<{
+  session: SessionUser;
+  origin: { teamId: number; id: number };
+} | null> {
+  const session = await getSessionUser();
+  if (!session) return null;
+  const origin = session.masterOf ?? { teamId: session.teamId, id: session.id };
+  if (!(await isMasterAccount(origin.teamId, origin.id))) return null;
+  return { session, origin };
 }

@@ -7,6 +7,8 @@ type MeUser = SessionUser & {
   teamName: string;
   teamLogoUrl: string | null;
   teamScoreRules?: ScoreRules;
+  isMaster?: boolean;
+  masterVisit?: boolean;
 };
 
 // 한 화면에서 세션 정보를 다시 불러오면(예: 팀 로고 변경) 상단 헤더처럼

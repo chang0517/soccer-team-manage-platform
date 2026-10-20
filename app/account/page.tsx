@@ -164,6 +164,18 @@ export default function AccountPage() {
 
       <NotificationSettings />
 
+      {user.isMaster && (
+        <div className="space-y-2 rounded-3xl bg-amber-50 p-4 ring-1 ring-amber-200">
+          <p className="text-sm font-bold text-amber-900">🛠 마스터</p>
+          <p className="text-xs text-amber-800">
+            모든 팀에 승인 없이 운영진으로 들어갈 수 있어요.
+          </p>
+          <Link href="/master" className="block text-sm font-semibold text-blue-700">
+            팀 목록 보기 →
+          </Link>
+        </div>
+      )}
+
       {user.role === "admin" && (
         <div className="space-y-2 card p-4">
           <div>

@@ -125,6 +125,14 @@ export default function Nav() {
           </div>
         </div>
       </header>
+      {user?.masterVisit && (
+        <div className="no-print sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 flex items-center justify-between gap-2 bg-amber-400 px-4 py-1.5 text-xs font-bold text-amber-950">
+          <span>🛠 마스터로 방문 중 · {user.teamName}</span>
+          <Link href="/master" className="pressable rounded-full bg-amber-950/10 px-2.5 py-1">
+            팀 바꾸기 / 돌아가기
+          </Link>
+        </div>
+      )}
       <nav className="no-print fixed inset-x-0 bottom-0 z-20 border-t border-zinc-200/70 bg-white/85 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur-xl md:hidden">
         <div
           className="grid px-1.5 pt-1.5"

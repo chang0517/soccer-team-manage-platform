@@ -315,7 +315,7 @@ export default function HomePage() {
           </p>
         </motion.section>
       )}
-      {user && !myId && (
+      {user && !myId && !user.masterVisit && (
         <section className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-200">
           아직 멤버 프로필과 연결되지 않았어요. 운영진에게 연결을 요청해 주세요.
         </section>
