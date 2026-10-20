@@ -15,7 +15,7 @@ interface Row {
   quarterConceded: (number | null)[] | null;
   missing: number;
   missingIds: number[];
-  squadNames: string[];
+  squadPlayers: { id: number; name: string | null; backNo: number | null }[];
   units: number;
   reasons: string[];
 }
@@ -60,7 +60,7 @@ export default function RecordsCheckPage() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">클린시트 점검</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          경기마다 클린시트가 왜 그렇게 잡혔는지 보여줘요. 쿼터 실점은 1Q~4Q 순서이고 ·는 입력 전이에요.
+          경기마다 클린시트가 왜 그렇게 잡혔는지 보여줘요. 쿼터 실점은 1Q~4Q 순서이고 ·는 입력 전이에요. 선수는 #선수id 이름 (등번호)로 보여요.
         </p>
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
@@ -89,13 +89,20 @@ export default function RecordsCheckPage() {
                   쿼터 실점 {r.quarterConceded ? r.quarterConceded.map(q).join(" ") : "기록 없음"} · 경기 실점{" "}
                   {r.conceded ?? "·"}
                 </p>
-                {r.missingIds.length > 0 && (
-                  <p className="text-xs text-red-600">
-                    명단에 없는 선수 번호: {r.missingIds.map((id) => `#${id}`).join(", ")}
-                  </p>
-                )}
-                {r.squadNames.length > 0 && (
-                  <p className="text-xs text-zinc-500">스쿼드에 있는 선수: {r.squadNames.join(", ")}</p>
+                {r.squadPlayers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {r.squadPlayers.map((p) => (
+                      <span
+                        key={p.id}
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          p.name ? "bg-zinc-100 text-zinc-700" : "bg-red-50 font-bold text-red-600"
+                        }`}
+                      >
+                        #{p.id} {p.name ?? "명단에 없음"}
+                        {p.name && p.backNo != null ? ` (${p.backNo})` : ""}
+                      </span>
+                    ))}
+                  </div>
                 )}
                 {r.reasons.map((x) => (
                   <p key={x} className={`text-xs ${r.missing > 0 ? "font-semibold text-red-600" : "text-zinc-600"}`}>

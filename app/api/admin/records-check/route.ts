@@ -27,9 +27,13 @@ export async function GET() {
       const units = [...computeQuarterCleanUnits([e], members).values()].reduce((a, b) => a + b, 0);
       const missingIds = [...squadIds].filter((id) => !known.has(id)).sort((a, b) => a - b);
       const missing = missingIds.length;
-      const squadNames = [...squadIds]
-        .filter((id) => known.has(id))
-        .map((id) => members.find((m) => m.id === id)!.name);
+      // 번호(선수 id)와 이름·등번호를 같이 보여줘서 비교할 수 있게 한다. 명단에 없는 번호는 name이 null.
+      const squadPlayers = [...squadIds]
+        .sort((a, b) => a - b)
+        .map((id) => {
+          const m = members.find((x) => x.id === id);
+          return { id, name: m?.name ?? null, backNo: m?.backNo ?? null };
+        });
       const reasons: string[] = [];
       if (e.squad && e.recordLog) {
         if (missing > 0) reasons.push(`스쿼드 선수 ${missing}명이 명단에 없음(선수 번호 복구 필요)`);
@@ -55,7 +59,7 @@ export async function GET() {
         quarterConceded,
         missing,
         missingIds,
-        squadNames,
+        squadPlayers,
         units,
         reasons,
       };
