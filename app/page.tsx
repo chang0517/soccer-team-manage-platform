@@ -19,6 +19,8 @@ import type { EventItem, OpponentKitRow, RankingRow, VoteRow, VoteStatus } from 
 const DUTY_FIELDS: { key: keyof DutyDraft; label: string }[] = [
   { key: "dutyOffense", label: "공가방1" },
   { key: "dutyDefense", label: "공가방2" },
+  { key: "dutyBag3", label: "공가방3" },
+  { key: "supplyBag", label: "비품 가방" },
   { key: "waterDuty", label: "물/음료" },
   { key: "iceboxDuty", label: "아이스박스" },
 ];
@@ -26,11 +28,20 @@ const DUTY_FIELDS: { key: keyof DutyDraft; label: string }[] = [
 interface DutyDraft {
   dutyOffense: string;
   dutyDefense: string;
+  dutyBag3: string;
+  supplyBag: string;
   waterDuty: string;
   iceboxDuty: string;
 }
 
-const EMPTY_DUTY: DutyDraft = { dutyOffense: "", dutyDefense: "", waterDuty: "", iceboxDuty: "" };
+const EMPTY_DUTY: DutyDraft = {
+  dutyOffense: "",
+  dutyDefense: "",
+  dutyBag3: "",
+  supplyBag: "",
+  waterDuty: "",
+  iceboxDuty: "",
+};
 
 const VOTE_LABEL: Record<VoteStatus, string> = { attend: "참석", maybe: "미정", absent: "불참" };
 
@@ -162,6 +173,8 @@ export default function HomePage() {
               {
                 dutyOffense: e.dutyOffense ?? "",
                 dutyDefense: e.dutyDefense ?? "",
+                dutyBag3: e.dutyBag3 ?? "",
+                supplyBag: e.supplyBag ?? "",
                 waterDuty: e.waterDuty ?? "",
                 iceboxDuty: e.iceboxDuty ?? "",
               },

@@ -79,6 +79,8 @@ function createDb(): Database.Database {
       notes TEXT NOT NULL DEFAULT '',
       duty_offense TEXT NOT NULL DEFAULT '',
       duty_defense TEXT NOT NULL DEFAULT '',
+      duty_bag3 TEXT NOT NULL DEFAULT '',
+      supply_bag TEXT NOT NULL DEFAULT '',
       water_duty TEXT NOT NULL DEFAULT '',
       icebox_duty TEXT NOT NULL DEFAULT '',
       record_log TEXT,
@@ -244,6 +246,12 @@ function createDb(): Database.Database {
   const reminderCols = db.prepare("PRAGMA table_info(team_reminders)").all() as { name: string }[];
   if (!reminderCols.some((c) => c.name === "member_ids")) {
     db.exec("ALTER TABLE team_reminders ADD COLUMN member_ids TEXT");
+  }
+  const eventCols = db.prepare("PRAGMA table_info(events)").all() as { name: string }[];
+  for (const col of ["duty_bag3", "supply_bag"]) {
+    if (!eventCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE events ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
   }
   return db;
 }
@@ -509,6 +517,8 @@ type EventDbRow = {
   notes: string;
   duty_offense: string;
   duty_defense: string;
+  duty_bag3: string;
+  supply_bag: string;
   water_duty: string;
   icebox_duty: string;
   record_log: string | null;
@@ -533,6 +543,8 @@ function toEvent(r: EventDbRow): EventItem {
     notes: r.notes,
     dutyOffense: r.duty_offense,
     dutyDefense: r.duty_defense,
+    dutyBag3: r.duty_bag3 ?? "",
+    supplyBag: r.supply_bag ?? "",
     waterDuty: r.water_duty,
     iceboxDuty: r.icebox_duty,
     recordLog: r.record_log ? (JSON.parse(r.record_log) as EventItem["recordLog"]) : null,
@@ -572,7 +584,7 @@ export function createEvent(
 ): EventItem {
   const r = getDb()
     .prepare(
-      "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, water_duty, icebox_duty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, duty_bag3, supply_bag, water_duty, icebox_duty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       teamId,
@@ -585,6 +597,8 @@ export function createEvent(
       e.notes,
       e.dutyOffense ?? "",
       e.dutyDefense ?? "",
+      e.dutyBag3 ?? "",
+      e.supplyBag ?? "",
       e.waterDuty ?? "",
       e.iceboxDuty ?? ""
     );
@@ -597,7 +611,7 @@ export function updateEvent(teamId: number, id: number, patch: Partial<EventItem
   const next = { ...cur, ...patch };
   getDb()
     .prepare(
-      "UPDATE events SET title=?, type=?, date=?, time=?, location=?, opponent=?, scored=?, conceded=?, squad=?, scrimmage_squad=?, notes=?, duty_offense=?, duty_defense=?, water_duty=?, icebox_duty=?, record_log=?, equipment_reminder_sent=? WHERE id=? AND team_id=?"
+      "UPDATE events SET title=?, type=?, date=?, time=?, location=?, opponent=?, scored=?, conceded=?, squad=?, scrimmage_squad=?, notes=?, duty_offense=?, duty_defense=?, duty_bag3=?, supply_bag=?, water_duty=?, icebox_duty=?, record_log=?, equipment_reminder_sent=? WHERE id=? AND team_id=?"
     )
     .run(
       next.title,
@@ -613,6 +627,8 @@ export function updateEvent(teamId: number, id: number, patch: Partial<EventItem
       next.notes,
       next.dutyOffense ?? "",
       next.dutyDefense ?? "",
+      next.dutyBag3 ?? "",
+      next.supplyBag ?? "",
       next.waterDuty ?? "",
       next.iceboxDuty ?? "",
       next.recordLog ? JSON.stringify(next.recordLog) : null,

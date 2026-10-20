@@ -46,6 +46,8 @@ export async function POST(request: Request) {
     notes: body.notes ?? "",
     dutyOffense: body.dutyOffense ?? "",
     dutyDefense: body.dutyDefense ?? "",
+    dutyBag3: body.dutyBag3 ?? "",
+    supplyBag: body.supplyBag ?? "",
     waterDuty: body.waterDuty ?? "",
     iceboxDuty: body.iceboxDuty ?? "",
     recordLog: null,

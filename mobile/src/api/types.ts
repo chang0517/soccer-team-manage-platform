@@ -80,6 +80,8 @@ export interface EventItem {
   notes: string;
   dutyOffense: string;
   dutyDefense: string;
+  dutyBag3?: string;
+  supplyBag?: string;
   waterDuty: string;
   iceboxDuty: string;
   recordLog: QuarterRecordEntry[] | null;

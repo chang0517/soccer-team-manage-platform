@@ -208,11 +208,13 @@ export interface EventItem {
   // 하나만 쓰는 단일 팀 모드다.
   scrimmageSquad: SquadData | null;
   notes: string;
-  // 경기 준비물/역할 비고 4칸: 공가방1·공가방2·물/음료·아이스박스 담당자.
+  // 경기 준비물/역할 비고 6칸: 공가방1·2·3·비품 가방·물/음료·아이스박스 담당자.
   // 홈 화면 카드에서 평소엔 읽기 전용으로 보이고 "수정"을 누르면 편집,
   // "확인"을 누르면 저장 후 다시 읽기 전용으로 돌아간다.
   dutyOffense: string;
   dutyDefense: string;
+  dutyBag3: string;
+  supplyBag: string;
   waterDuty: string;
   iceboxDuty: string;
   // 쿼터별 기록 입력 화면의 원본 로그(스코어+골/어시). 없으면 아직 입력 전.
