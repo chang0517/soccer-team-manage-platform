@@ -13,6 +13,10 @@ function masterIdentities(): Set<string> {
   );
 }
 
+export function masterConfigured(): boolean {
+  return masterIdentities().size > 0;
+}
+
 export function isMasterIdentity(teamSlug: string, username: string): boolean {
   return masterIdentities().has(`${teamSlug}:${username}`.toLowerCase());
 }

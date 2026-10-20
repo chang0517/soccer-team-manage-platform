@@ -36,6 +36,19 @@ export default function MasterPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했어요."));
   }, [user?.isMaster, user?.teamId]);
 
+  const [setup, setSetup] = useState<{
+    identity: string;
+    configured: boolean;
+    isAdmin: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (loading || !user || user.isMaster) return;
+    fetch("/api/master/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSetup)
+      .catch(() => {});
+  }, [loading, user]);
+
   const enter = async (team: MasterTeam) => {
     setBusyId(team.id);
     try {
@@ -60,6 +73,22 @@ export default function MasterPage() {
     return (
       <div className="space-y-3 pt-10 text-center">
         <p className="text-sm text-zinc-500">마스터만 볼 수 있는 페이지예요.</p>
+        {setup?.isAdmin && (
+          <div className="mx-auto max-w-sm space-y-1.5 rounded-2xl bg-amber-50 p-4 text-left text-xs text-amber-900 ring-1 ring-amber-200">
+            <p className="font-bold">이 계정을 마스터로 쓰려면</p>
+            <p>
+              Vercel 환경변수 <b>MASTER_ACCOUNTS</b>에 아래 값을 넣고 다시 배포한 뒤, 로그아웃했다가 다시 로그인하세요.
+            </p>
+            <p className="select-all break-all rounded-lg bg-white px-2.5 py-2 font-mono text-sm font-bold">
+              {setup.identity}
+            </p>
+            <p className="text-amber-700">
+              {setup.configured
+                ? "지금 설정된 값에 이 계정이 없어요(다른 팀코드나 철자가 다를 수 있어요)."
+                : "지금은 설정된 값이 없어요(환경변수가 비었거나 배포가 아직 안 됐어요)."}
+            </p>
+          </div>
+        )}
         <Link href="/" className="font-semibold text-blue-700">
           홈으로
         </Link>
