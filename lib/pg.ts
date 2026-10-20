@@ -102,6 +102,7 @@ async function createTables(client: PoolClient) {
       duty_defense TEXT NOT NULL DEFAULT '',
       duty_bag3 TEXT NOT NULL DEFAULT '',
       supply_bag TEXT NOT NULL DEFAULT '',
+      vest_bag TEXT NOT NULL DEFAULT '',
       water_duty TEXT NOT NULL DEFAULT '',
       icebox_duty TEXT NOT NULL DEFAULT '',
       record_log JSONB,
@@ -278,6 +279,7 @@ const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
   ["events", "mvp_open_notified", "BOOLEAN NOT NULL DEFAULT false"],
   ["events", "duty_bag3", "TEXT NOT NULL DEFAULT ''"],
   ["events", "supply_bag", "TEXT NOT NULL DEFAULT ''"],
+  ["events", "vest_bag", "TEXT NOT NULL DEFAULT ''"],
   ["teams", "calendar_token", "TEXT"],
   ["team_reminders", "member_ids", "TEXT"],
   ["events", "mvp_result_notified", "BOOLEAN NOT NULL DEFAULT false"],
@@ -643,6 +645,7 @@ type EventDbRow = {
   duty_defense: string;
   duty_bag3: string;
   supply_bag: string;
+  vest_bag: string;
   water_duty: string;
   icebox_duty: string;
   record_log: EventItem["recordLog"];
@@ -669,6 +672,7 @@ function toEvent(r: EventDbRow): EventItem {
     dutyDefense: r.duty_defense,
     dutyBag3: r.duty_bag3 ?? "",
     supplyBag: r.supply_bag ?? "",
+    vestBag: r.vest_bag ?? "",
     waterDuty: r.water_duty,
     iceboxDuty: r.icebox_duty,
     recordLog: r.record_log ?? null,
@@ -712,7 +716,7 @@ export async function createEvent(
 ): Promise<EventItem> {
   const pool = await ready();
   const { rows } = await pool.query(
-    "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, duty_bag3, supply_bag, water_duty, icebox_duty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
+    "INSERT INTO events (team_id, title, type, date, time, location, opponent, notes, duty_offense, duty_defense, duty_bag3, supply_bag, vest_bag, water_duty, icebox_duty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id",
     [
       teamId,
       e.title,
@@ -726,6 +730,7 @@ export async function createEvent(
       e.dutyDefense ?? "",
       e.dutyBag3 ?? "",
       e.supplyBag ?? "",
+      e.vestBag ?? "",
       e.waterDuty ?? "",
       e.iceboxDuty ?? "",
     ]
@@ -739,7 +744,7 @@ export async function updateEvent(teamId: number, id: number, patch: Partial<Eve
   const next = { ...cur, ...patch };
   const pool = await ready();
   await pool.query(
-    "UPDATE events SET title=$1, type=$2, date=$3, time=$4, location=$5, opponent=$6, scored=$7, conceded=$8, squad=$9, scrimmage_squad=$10, notes=$11, duty_offense=$12, duty_defense=$13, duty_bag3=$14, supply_bag=$15, water_duty=$16, icebox_duty=$17, record_log=$18, equipment_reminder_sent=$19 WHERE id=$20 AND team_id=$21",
+    "UPDATE events SET title=$1, type=$2, date=$3, time=$4, location=$5, opponent=$6, scored=$7, conceded=$8, squad=$9, scrimmage_squad=$10, notes=$11, duty_offense=$12, duty_defense=$13, duty_bag3=$14, supply_bag=$15, vest_bag=$16, water_duty=$17, icebox_duty=$18, record_log=$19, equipment_reminder_sent=$20 WHERE id=$21 AND team_id=$22",
     [
       next.title,
       next.type,
@@ -756,6 +761,7 @@ export async function updateEvent(teamId: number, id: number, patch: Partial<Eve
       next.dutyDefense ?? "",
       next.dutyBag3 ?? "",
       next.supplyBag ?? "",
+      next.vestBag ?? "",
       next.waterDuty ?? "",
       next.iceboxDuty ?? "",
       next.recordLog ? JSON.stringify(next.recordLog) : null,

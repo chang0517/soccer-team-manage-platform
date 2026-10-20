@@ -82,6 +82,7 @@ export interface EventItem {
   dutyDefense: string;
   dutyBag3?: string;
   supplyBag?: string;
+  vestBag?: string;
   waterDuty: string;
   iceboxDuty: string;
   recordLog: QuarterRecordEntry[] | null;

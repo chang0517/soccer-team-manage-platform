@@ -44,8 +44,8 @@ export async function GET() {
         start + MATCH_DURATION_HOURS * 3600_000 + EQUIPMENT_REMINDER_DELAY_MINUTES * 60_000;
       if (Number.isNaN(start) || now < dueAt) continue;
 
-      const allFilled =
-        ev.dutyOffense && ev.dutyDefense && ev.waterDuty && ev.iceboxDuty;
+      // 공가방은 한 칸(dutyOffense)으로 합쳤다. 예전 공가방2 칸은 더 이상 보지 않는다.
+      const allFilled = ev.dutyOffense && ev.waterDuty && ev.iceboxDuty;
       if (!allFilled) {
         await Promise.all(
           adminMemberIds.map((memberId) =>

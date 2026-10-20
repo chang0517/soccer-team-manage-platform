@@ -17,10 +17,9 @@ import type { MatchWeather } from "@/lib/weather";
 import type { EventItem, OpponentKitRow, RankingRow, VoteRow, VoteStatus } from "@/lib/types";
 
 const DUTY_FIELDS: { key: keyof DutyDraft; label: string }[] = [
-  { key: "dutyOffense", label: "공가방1" },
-  { key: "dutyDefense", label: "공가방2" },
-  { key: "dutyBag3", label: "공가방3" },
+  { key: "dutyOffense", label: "공가방" },
   { key: "supplyBag", label: "비품 가방" },
+  { key: "vestBag", label: "조끼 가방" },
   { key: "waterDuty", label: "물/음료" },
   { key: "iceboxDuty", label: "아이스박스" },
 ];
@@ -30,6 +29,7 @@ interface DutyDraft {
   dutyDefense: string;
   dutyBag3: string;
   supplyBag: string;
+  vestBag: string;
   waterDuty: string;
   iceboxDuty: string;
 }
@@ -39,6 +39,7 @@ const EMPTY_DUTY: DutyDraft = {
   dutyDefense: "",
   dutyBag3: "",
   supplyBag: "",
+  vestBag: "",
   waterDuty: "",
   iceboxDuty: "",
 };
@@ -171,10 +172,13 @@ export default function HomePage() {
             evs.map((e) => [
               e.id,
               {
-                dutyOffense: e.dutyOffense ?? "",
-                dutyDefense: e.dutyDefense ?? "",
-                dutyBag3: e.dutyBag3 ?? "",
+                // 공가방은 한 칸으로 통일 — 예전에 따로 적은 공가방2·3 값은 이어 붙여
+                // 보여주고, 저장할 때 그 칸들은 비운다.
+                dutyOffense: [e.dutyOffense, e.dutyDefense, e.dutyBag3].filter(Boolean).join(", "),
+                dutyDefense: "",
+                dutyBag3: "",
                 supplyBag: e.supplyBag ?? "",
+                vestBag: e.vestBag ?? "",
                 waterDuty: e.waterDuty ?? "",
                 iceboxDuty: e.iceboxDuty ?? "",
               },
