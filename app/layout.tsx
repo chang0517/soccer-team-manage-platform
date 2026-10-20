@@ -31,9 +31,17 @@ export async function generateMetadata(): Promise<Metadata> {
     title: name,
     description: `${name} 일정·스쿼드·기록 관리`,
     manifest: "/manifest.webmanifest",
+    // Next는 접두사 없는 mobile-web-app-capable만 내보내는데, 아이폰 홈 화면
+    // 앱(전체 화면 실행)은 apple-mobile-web-app-capable도 있어야 안정적으로
+    // 앱처럼 열린다.
+    other: { "apple-mobile-web-app-capable": "yes" },
     icons: {
       icon: [{ url: icon }],
-      apple: team?.logoUrl || "/apple-touch-icon.png",
+      // 아이폰은 홈 화면 아이콘으로 data: 주소를 못 읽는 경우가 있어서, 팀 로고는
+      // 이미지 주소(로고가 바뀌면 v도 바뀜)로 내려준다.
+      apple: team?.logoUrl
+        ? `/api/teams/${team.slug}/logo?v=${team.logoUrl.length}`
+        : "/apple-touch-icon.png",
     },
     appleWebApp: {
       capable: true,
