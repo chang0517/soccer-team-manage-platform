@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import NotificationSettings from "@/components/NotificationSettings";
 import { useSession } from "@/components/useSession";
 
 // 큰 사진을 그대로 올리면 서버 쪽 800KB 캡에 걸리기 쉬워서, 올리기 전에
@@ -160,6 +161,8 @@ export default function AccountPage() {
           </Link>
         </div>
       )}
+
+      <NotificationSettings />
 
       {user.role === "admin" && (
         <div className="space-y-2 card p-4">

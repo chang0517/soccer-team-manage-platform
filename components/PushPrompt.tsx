@@ -1,61 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-// base64url VAPID 공개키를 Uint8Array로 변환 (PushManager.subscribe 요구 형식)
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
+import { toast } from "sonner";
+import { enablePush, getPushState } from "./pushClient";
 
 export default function PushPrompt() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      // iOS Safari
-      (navigator as unknown as { standalone?: boolean }).standalone === true;
-    if (!isStandalone) return;
-    if (Notification.permission === "denied") return;
     if (localStorage.getItem("pushDismissed") === "1") return;
-
-    navigator.serviceWorker.register("/sw.js").then(async (reg) => {
-      const existing = await reg.pushManager.getSubscription();
-      if (!existing && Notification.permission !== "granted") setVisible(true);
-    });
+    // 앱(홈 화면)으로 연 화면에서만 배너를 띄운다. 알림을 켜는 다른 길은 계정 설정에 있다.
+    if (!window.matchMedia("(display-mode: standalone)").matches &&
+        (navigator as unknown as { standalone?: boolean }).standalone !== true) return;
+    getPushState()
+      .then((state) => setVisible(state === "off"))
+      .catch(() => {});
   }, []);
 
   const enable = async () => {
     setBusy(true);
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setVisible(false);
-        return;
-      }
-      const reg = await navigator.serviceWorker.ready;
-      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sub),
-      });
-    } finally {
-      setBusy(false);
-      setVisible(false);
-    }
+    const result = await enablePush();
+    setBusy(false);
+    setVisible(false);
+    if (result === "ok") toast.success("알림을 켰어요");
+    else if (result === "failed") toast.error("알림을 켜지 못했어요. 계정 설정에서 다시 시도해 주세요.");
   };
 
   const dismiss = () => {
