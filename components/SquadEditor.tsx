@@ -641,9 +641,7 @@ export default function SquadEditor({
                     >
                       {slot.label}
                     </span>
-                    <motion.span
-                      layoutId={!split && a?.memberId != null ? `squad-${team}-p-${a.memberId}` : undefined}
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    <span
                       className={`max-w-[78px] truncate rounded-md px-1.5 py-px text-[11px] font-bold ${
                         mine
                           ? "bg-white text-blue-800"
@@ -667,7 +665,7 @@ export default function SquadEditor({
                         : empty
                           ? "비어 있음"
                           : nameOf(a?.memberId)}
-                    </motion.span>
+                    </span>
                   </button>
                 </div>
               );
@@ -707,10 +705,8 @@ export default function SquadEditor({
                         ? `2순위 · ${fmtCount(c)}쿼터`
                         : `${m.isGuest ? "용병" : POS_SHORT[m.pos1]} · ${fmtCount(c)}쿼터 출전`;
                   return (
-                    <motion.button
+                    <button
                       key={id}
-                      layoutId={`squad-${team}-p-${id}`}
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
                       onClick={() => tapBench(id)}
                       disabled={!editable}
                       className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl px-1 py-1.5 disabled:cursor-default ${
@@ -731,7 +727,7 @@ export default function SquadEditor({
                       >
                         {sub}
                       </span>
-                    </motion.button>
+                    </button>
                   );
                 })}
               </div>
