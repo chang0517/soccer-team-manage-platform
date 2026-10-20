@@ -1,7 +1,7 @@
-import { getEvent, getVotes } from "./db";
+import { getEvent, getVotes, listMembers, listUsersByStatus } from "./db";
 import { formatDate } from "./format";
-import { sendPushToEach } from "./push";
-import { memberQuarterRoles } from "./squad";
+import { sendPushToEach, sendPushToMembers } from "./push";
+import { memberQuarterRoles, SQUAD_APPROVAL_THRESHOLD } from "./squad";
 import type { SquadData } from "./types";
 
 /**
@@ -43,4 +43,38 @@ export async function notifySquadConfirmed(
       },
     }))
   );
+}
+
+/**
+ * 스쿼드가 제출되면 제출한 사람을 뺀 다른 운영진에게 "승인해 주세요" 푸시를
+ * 보낸다. 승인을 모으려면 다른 운영진이 제출 사실을 알아야 해서다. 휴대폰
+ * 알림을 켜둔 운영진에게만 가고, 보낸 대상 수를 돌려준다.
+ */
+export async function notifySquadSubmitted(
+  teamId: number,
+  eventId: number,
+  squad: SquadData,
+  team: "A" | "B"
+): Promise<number> {
+  const [event, users, members] = await Promise.all([
+    getEvent(teamId, eventId),
+    listUsersByStatus(teamId, "approved"),
+    listMembers(teamId),
+  ]);
+  if (!event) return 0;
+  const adminIds = [
+    ...new Set(
+      users.filter((u) => u.role === "admin" && u.memberId != null).map((u) => u.memberId as number)
+    ),
+  ].filter((id) => id !== squad.submittedBy);
+  if (adminIds.length === 0) return 0;
+  const submitter = members.find((m) => m.id === squad.submittedBy)?.name ?? "운영진";
+  const label = event.opponent ? `vs ${event.opponent}` : event.title;
+  const teamPart = event.scrimmageSquad ? ` ${team}팀` : "";
+  await sendPushToMembers(teamId, adminIds, {
+    title: "스쿼드 승인 요청 📋",
+    body: `${submitter}님이 ${formatDate(event.date, event.time)} ${label}${teamPart} 스쿼드를 제출했어요 · 운영진 ${SQUAD_APPROVAL_THRESHOLD}명이 승인하면 확정돼요`,
+    url: `/events/${eventId}#squad`,
+  });
+  return adminIds.length;
 }

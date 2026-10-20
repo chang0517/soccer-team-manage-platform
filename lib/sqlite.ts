@@ -1431,7 +1431,7 @@ export function savePushSubscription(
     .prepare(
       `INSERT INTO push_subscriptions (team_id, endpoint, p256dh, auth, member_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, member_id=excluded.member_id`
+       ON CONFLICT(endpoint) DO UPDATE SET team_id=excluded.team_id, p256dh=excluded.p256dh, auth=excluded.auth, member_id=excluded.member_id`
     )
     .run(teamId, sub.endpoint, sub.p256dh, sub.auth, sub.memberId, new Date().toISOString());
 }

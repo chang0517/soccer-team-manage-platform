@@ -1628,7 +1628,7 @@ export async function savePushSubscription(
   await pool.query(
     `INSERT INTO push_subscriptions (team_id, endpoint, p256dh, auth, member_id)
      VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, member_id=EXCLUDED.member_id`,
+     ON CONFLICT (endpoint) DO UPDATE SET team_id=EXCLUDED.team_id, p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, member_id=EXCLUDED.member_id`,
     [teamId, sub.endpoint, sub.p256dh, sub.auth, sub.memberId]
   );
 }

@@ -32,6 +32,9 @@ async function sendTo(subs: PushSub[], payload: { title: string; body: string; u
         const statusCode = (err as { statusCode?: number }).statusCode;
         if (statusCode === 404 || statusCode === 410) {
           await deletePushSubscription(sub.endpoint);
+        } else {
+          // 그 밖의 실패(키 불일치·네트워크 등)는 삼키되 로그는 남겨 원인을 찾을 수 있게 한다.
+          console.error("[push] send failed:", statusCode ?? "", (err as Error).message);
         }
       }
     })

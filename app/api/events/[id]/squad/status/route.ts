@@ -2,7 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { mutateEventSquad } from "@/lib/db";
 import { applySquadAction, SquadActionError, squadStatus } from "@/lib/squad";
 import type { SquadAction } from "@/lib/squad";
-import { notifySquadConfirmed } from "@/lib/squadNotify";
+import { notifySquadConfirmed, notifySquadSubmitted } from "@/lib/squadNotify";
 
 const ACTIONS: SquadAction[] = ["submit", "withdraw", "approve", "unapprove", "unlock"];
 
@@ -59,6 +59,14 @@ export async function POST(
       console.error("[squad] confirm notify failed:", e);
       return 0;
     });
+  }
+  // 제출된 순간(작성 중 → 승인 대기)에만 다른 운영진에게 승인 요청을 보낸다.
+  const justSubmitted =
+    squadStatus(result.before) !== "submitted" && squadStatus(result.after) === "submitted";
+  if (justSubmitted) {
+    await notifySquadSubmitted(admin.teamId, eventId, result.after, team).catch((e) =>
+      console.error("[squad] submit notify failed:", e)
+    );
   }
   return Response.json({ squad: result.after, justConfirmed, notified });
 }
