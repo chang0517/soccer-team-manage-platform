@@ -25,7 +25,11 @@ export async function GET() {
       const log = e.recordLog ? normalizeRecordLog(e.recordLog) : null;
       const quarterConceded = log ? log.map((q) => q.conceded) : null;
       const units = [...computeQuarterCleanUnits([e], members).values()].reduce((a, b) => a + b, 0);
-      const missing = [...squadIds].filter((id) => !known.has(id)).length;
+      const missingIds = [...squadIds].filter((id) => !known.has(id)).sort((a, b) => a - b);
+      const missing = missingIds.length;
+      const squadNames = [...squadIds]
+        .filter((id) => known.has(id))
+        .map((id) => members.find((m) => m.id === id)!.name);
       const reasons: string[] = [];
       if (e.squad && e.recordLog) {
         if (missing > 0) reasons.push(`스쿼드 선수 ${missing}명이 명단에 없음(선수 번호 복구 필요)`);
@@ -50,6 +54,8 @@ export async function GET() {
         hasLog: !!e.recordLog,
         quarterConceded,
         missing,
+        missingIds,
+        squadNames,
         units,
         reasons,
       };
@@ -58,6 +64,7 @@ export async function GET() {
 
   return Response.json({
     memberCount: members.length,
+    roster: members.map((m) => ({ id: m.id, name: m.name, backNo: m.backNo })),
     totalUnits: rows.reduce((a, r) => a + r.units, 0),
     rows,
   });

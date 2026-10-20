@@ -14,13 +14,20 @@ interface Row {
   hasLog: boolean;
   quarterConceded: (number | null)[] | null;
   missing: number;
+  missingIds: number[];
+  squadNames: string[];
   units: number;
   reasons: string[];
 }
 
 export default function RecordsCheckPage() {
   const { user, loading } = useSession();
-  const [data, setData] = useState<{ memberCount: number; totalUnits: number; rows: Row[] } | null>(null);
+  const [data, setData] = useState<{
+    memberCount: number;
+    totalUnits: number;
+    roster: { id: number; name: string; backNo: number | null }[];
+    rows: Row[];
+  } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -62,6 +69,12 @@ export default function RecordsCheckPage() {
           <p className="rounded-2xl bg-zinc-50 p-3 text-sm">
             쿼터 단위로 계산된 클린시트 합계 <b>{data.totalUnits}</b>유닛 · 등록된 선수 {data.memberCount}명
           </p>
+          <details className="rounded-2xl bg-zinc-50 p-3 text-sm">
+            <summary className="cursor-pointer font-semibold">현재 선수 명단 (번호 = 선수 id)</summary>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+              {data.roster.map((m) => `#${m.id} ${m.name}${m.backNo != null ? `(${m.backNo})` : ""}`).join(" · ")}
+            </p>
+          </details>
           <ul className="space-y-2">
             {data.rows.map((r) => (
               <li key={r.id} className="card space-y-1.5 p-3">
@@ -76,6 +89,14 @@ export default function RecordsCheckPage() {
                   쿼터 실점 {r.quarterConceded ? r.quarterConceded.map(q).join(" ") : "기록 없음"} · 경기 실점{" "}
                   {r.conceded ?? "·"}
                 </p>
+                {r.missingIds.length > 0 && (
+                  <p className="text-xs text-red-600">
+                    명단에 없는 선수 번호: {r.missingIds.map((id) => `#${id}`).join(", ")}
+                  </p>
+                )}
+                {r.squadNames.length > 0 && (
+                  <p className="text-xs text-zinc-500">스쿼드에 있는 선수: {r.squadNames.join(", ")}</p>
+                )}
                 {r.reasons.map((x) => (
                   <p key={x} className={`text-xs ${r.missing > 0 ? "font-semibold text-red-600" : "text-zinc-600"}`}>
                     {x}
