@@ -29,6 +29,36 @@ export default function RecordsCheckPage() {
     rows: Row[];
   } | null>(null);
   const [error, setError] = useState("");
+  const [pick, setPick] = useState("");
+  const [detail, setDetail] = useState<{
+    member: { id: number; name: string; backNo: number | null };
+    totalUnits: number;
+    playedNotInSquad: number;
+    inSquadNotPlayed: number;
+    rows: {
+      id: number;
+      date: string;
+      opponent: string;
+      played: boolean;
+      hasSquad: boolean;
+      roles: string[] | null;
+      inSquad: boolean;
+      quarterConceded: (number | null)[] | null;
+      hasLog: boolean;
+      units: number;
+    }[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!pick) {
+      setDetail(null);
+      return;
+    }
+    fetch(`/api/admin/records-check/member?member=${pick}`)
+      .then((r) => r.json())
+      .then((j) => setDetail(j.error ? null : j))
+      .catch(() => setDetail(null));
+  }, [pick]);
 
   useEffect(() => {
     if (user?.role !== "admin") return;
@@ -75,6 +105,53 @@ export default function RecordsCheckPage() {
               {data.roster.map((m) => `#${m.id} ${m.name}${m.backNo != null ? `(${m.backNo})` : ""}`).join(" · ")}
             </p>
           </details>
+          <div className="card space-y-2 p-3">
+            <p className="text-sm font-bold">선수 한 명 자세히 보기</p>
+            <select
+              value={pick}
+              onChange={(e) => setPick(e.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">선수를 고르세요</option>
+              {data.roster.map((m) => (
+                <option key={m.id} value={m.id}>
+                  #{m.id} {m.name}
+                  {m.backNo != null ? ` (${m.backNo})` : ""}
+                </option>
+              ))}
+            </select>
+            {detail && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-zinc-600">
+                  {detail.member.name}: 클린시트 <b>{detail.totalUnits}</b>유닛 · 뛰었는데 스쿼드에 없는 경기{" "}
+                  <b className={detail.playedNotInSquad > 0 ? "text-red-600" : ""}>{detail.playedNotInSquad}</b>개 ·
+                  스쿼드에는 있는데 기록상 안 뛴 경기{" "}
+                  <b className={detail.inSquadNotPlayed > 0 ? "text-red-600" : ""}>{detail.inSquadNotPlayed}</b>개
+                </p>
+                <ul className="space-y-1">
+                  {detail.rows.map((r) => (
+                    <li
+                      key={r.id}
+                      className={`rounded-xl px-2.5 py-1.5 text-xs ${
+                        (r.played && r.hasSquad && !r.inSquad) || (!r.played && r.inSquad && r.hasLog)
+                          ? "bg-red-50 text-red-700"
+                          : "bg-zinc-50 text-zinc-700"
+                      }`}
+                    >
+                      <span className="font-bold">
+                        {r.date}
+                        {r.opponent ? ` vs ${r.opponent}` : ""}
+                      </span>{" "}
+                      · {r.played ? "출전 기록 있음" : "출전 기록 없음"} ·{" "}
+                      {r.hasSquad ? `스쿼드 ${r.roles?.join(" ")}` : "스쿼드 없음"} · 쿼터 실점{" "}
+                      {r.quarterConceded ? r.quarterConceded.map(q).join(" ") : "기록 없음"} ·{" "}
+                      <b>{r.units}유닛</b>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <ul className="space-y-2">
             {data.rows.map((r) => (
               <li key={r.id} className="card space-y-1.5 p-3">
