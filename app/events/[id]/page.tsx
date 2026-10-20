@@ -975,17 +975,10 @@ export default function EventDetailPage({
               </button>
             </div>
           )}
-          <p className="mb-3 text-xs text-zinc-400">
-            {isScrimmage
-              ? "내전(자체 훈련) 모드예요. 참석자를 포지션 균형에 맞춰 두 팀으로 나눠서, 팀마다 포메이션·쿼터를 따로 관리해요."
-              : "경기 3일 전이 되면 참석 투표 기준으로 쿼터별 스쿼드가 자동으로 만들어져요."}
-            {" "}자동 배치는 1순위 포지션별로 출전 쿼터를 고르게 나누고, 두 쿼터 뛰는
-            사람은 1·3 / 2·4쿼터로 쉬어가며 뛰게 해요. 한 사람은 최대 3쿼터까지만
-            넣고, 그래도 모자란 자리는 빈칸으로 둬요.
-          </p>
-
           {currentSquad ? (
             <>
+              {/* 전체 명단은 내전에서 선수를 다른 팀으로 옮길 때만 필요해서 그때만 보여준다. */}
+              {canMoveTeam && (
               <div className="mb-3 rounded-xl bg-zinc-50 p-3 text-sm">
                 <p className="mb-1.5 text-xs font-bold text-zinc-500">
                   {isScrimmage ? `${activeTeam}팀 전체 명단` : "전체 명단"} · {rosterIds.length}명
@@ -1021,6 +1014,7 @@ export default function EventDetailPage({
                   ))}
                 </div>
               </div>
+              )}
 
               <SquadEditor
                 key={activeTeam}
