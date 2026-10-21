@@ -4,7 +4,7 @@ import { getTeamBySlug } from "@/lib/db";
 // 홈 화면 앱 아이콘용 팀 로고. 안드로이드는 192·512 정사각형 PNG가 필요한데 팀이
 // 올린 로고는 크기·비율이 제각각이라 여기서 맞춰서 내려준다. maskable=1이면
 // 휴대폰이 아이콘을 둥글게·모서리 둥글게 잘라도 안 잘리도록 여백을 두고 흰 바탕에 올린다.
-const SIZES = new Set([192, 512]);
+const SIZES = new Set([180, 192, 512]);
 
 export async function GET(
   request: Request,
@@ -14,6 +14,8 @@ export async function GET(
   const url = new URL(request.url);
   const size = Number(url.searchParams.get("size"));
   const maskable = url.searchParams.get("maskable") === "1";
+  // flat=1: 투명 배경 없이 흰 바탕에 꽉 채운다(아이폰 홈 화면은 투명을 검정으로 칠한다).
+  const flat = url.searchParams.get("flat") === "1";
   if (!SIZES.has(size)) return new Response("bad size", { status: 400 });
 
   const team = await getTeamBySlug(slug);
@@ -45,6 +47,12 @@ export async function GET(
         create: { width: size, height: size, channels: 4, background: "#ffffff" },
       })
         .composite([{ input: logoPng, gravity: "center" }])
+        .png()
+        .toBuffer();
+    } else if (flat) {
+      png = await sharp(source)
+        .resize(size, size, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .flatten({ background: "#ffffff" })
         .png()
         .toBuffer();
     } else {

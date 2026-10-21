@@ -26,21 +26,32 @@ export async function generateMetadata(): Promise<Metadata> {
   // 요청마다 다시 실행되니 data: URI를 그대로 넣어도 된다. 다만 홈 화면에
   // "설치"하는 PWA 아이콘(manifest.webmanifest)은 정적 파일이라 이건
   // 여전히 범용 아이콘으로 고정된다.
-  const icon = team?.logoUrl || "/favicon-32.png";
+  // 팀 로고는 홈 화면 아이콘에 맞는 크기의 이미지 주소로 내려준다(로고가 바뀌면 v도 바뀜).
+  const logoVersion = team?.logoUrl
+    ? `${team.logoUrl.length}-${team.logoUrl.slice(-24).replace(/[^A-Za-z0-9]/g, "")}`
+    : "";
+  const teamIcon = (size: number, extra = "") =>
+    `/api/teams/${team?.slug}/icon?size=${size}${extra}&v=${logoVersion}`;
   return {
     title: name,
     description: `${name} 일정·스쿼드·기록 관리`,
-    manifest: "/manifest.webmanifest",
+    // 앱 정보 파일은 브라우저가 로그인 쿠키 없이 가져가는 경우가 많아서, 팀 코드를
+    // 주소에 실어 보내 어느 팀 정보를 줄지 알 수 있게 한다.
+    manifest: team?.logoUrl
+      ? `/manifest.webmanifest?team=${encodeURIComponent(team.slug)}`
+      : "/manifest.webmanifest",
     // Next는 접두사 없는 mobile-web-app-capable만 내보내는데, 아이폰 홈 화면
     // 앱(전체 화면 실행)은 apple-mobile-web-app-capable도 있어야 안정적으로
     // 앱처럼 열린다.
     other: { "apple-mobile-web-app-capable": "yes" },
     icons: {
-      icon: [{ url: icon }],
+      icon: team?.logoUrl
+        ? [{ url: teamIcon(192), sizes: "192x192", type: "image/png" }]
+        : [{ url: "/favicon-32.png" }],
       // 아이폰은 홈 화면 아이콘으로 data: 주소를 못 읽는 경우가 있어서, 팀 로고는
       // 이미지 주소(로고가 바뀌면 v도 바뀜)로 내려준다.
       apple: team?.logoUrl
-        ? `/api/teams/${team.slug}/logo?v=${team.logoUrl.length}`
+        ? [{ url: teamIcon(180, "&flat=1"), sizes: "180x180", type: "image/png" }]
         : "/apple-touch-icon.png",
     },
     appleWebApp: {
