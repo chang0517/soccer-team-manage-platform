@@ -22,6 +22,7 @@ export async function GET() {
       user: {
         id: -1,
         teamId: team.id,
+        teamSlug: team.slug,
         teamName: team.name,
         teamLogoUrl: team.logoUrl ?? null,
         teamScoreRules: team.scoreRules ?? DEFAULT_SCORE_RULES,
@@ -45,6 +46,7 @@ export async function GET() {
     user: {
       id: user.id,
       teamId: user.teamId,
+      teamSlug: team?.slug ?? null,
       teamName: team?.name ?? "",
       teamLogoUrl: team?.logoUrl ?? null,
       teamScoreRules: team?.scoreRules ?? DEFAULT_SCORE_RULES,

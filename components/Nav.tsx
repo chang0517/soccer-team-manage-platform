@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useSession } from "./useSession";
 import { haptic } from "./ui/haptic";
+import { TEAM_SLUG_KEY } from "@/lib/teamSlug";
 
 // "멤버"(회원가입 때 입력하고 필요하면 /members에서 직접 수정 — 운영진은
 // /admin에서 링크로 들어감), "전당"(랭킹 페이지 안 탭으로 통합), "운영진"
@@ -27,6 +29,31 @@ export default function Nav() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const tabs = BASE_TABS;
+
+  // 로그인 전에도 이 기기에서 마지막으로 쓴 팀의 로고·이름을 왼쪽 위에 계속
+  // 보여준다(처음 쓰는 기기라면 앱 로고). 마스터가 다른 팀을 방문 중일 때는
+  // 기억하는 팀을 바꾸지 않아서, 로그아웃하면 내 팀 로고로 돌아온다.
+  const [brand, setBrand] = useState<{ name: string; logo: string | null } | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    try {
+      if (user) {
+        if (user.teamSlug && !user.masterVisit) localStorage.setItem(TEAM_SLUG_KEY, user.teamSlug);
+        return;
+      }
+      const slug = localStorage.getItem(TEAM_SLUG_KEY) ?? "";
+      if (!slug) return;
+      fetch("/api/teams/public")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list: { slug: string; name: string; logo: string | null }[]) => {
+          const t = list.find((x) => x.slug === slug);
+          if (t) setBrand({ name: t.name, logo: t.logo });
+        })
+        .catch(() => {});
+    } catch {
+      // 저장소를 못 쓰는 환경이면 앱 로고 그대로
+    }
+  }, [loading, user]);
 
   const doLogout = async () => {
     await logout();
@@ -51,8 +78,22 @@ export default function Nav() {
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-extrabold ring-2 ring-white/20">
                 {user.teamName?.trim().charAt(0) || "T"}
               </span>
+            ) : brand ? (
+              // 로그인 전이어도 마지막으로 쓴 팀이 있으면 그 팀 로고
+              brand.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 팀이 올린 로고라 크기가 제각각
+                <img
+                  src={brand.logo}
+                  alt={brand.name}
+                  className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+                />
+              ) : (
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-extrabold ring-2 ring-white/20">
+                  {brand.name.trim().charAt(0) || "T"}
+                </span>
+              )
             ) : (
-              // 로그인 전(팀이 정해지지 않은 화면)에만 앱 로고
+              // 처음 쓰는 기기(기억하는 팀이 없는 화면)에만 앱 로고
               // eslint-disable-next-line @next/next/no-img-element -- 작은 정적 아이콘
               <img
                 src="/app-mark.png"
@@ -61,7 +102,7 @@ export default function Nav() {
               />
             )}
             <span className="text-[17px] font-extrabold tracking-tight">
-              {user?.teamName || "Team Manager"}
+              {user?.teamName || brand?.name || "Team Manager"}
             </span>
           </Link>
           <div className="flex items-center gap-3">

@@ -5,6 +5,7 @@ import type { ScoreRules, SessionUser } from "@/lib/types";
 
 type MeUser = SessionUser & {
   teamName: string;
+  teamSlug?: string | null;
   teamLogoUrl: string | null;
   teamScoreRules?: ScoreRules;
   isMaster?: boolean;
