@@ -307,6 +307,7 @@ export default function AdminPage() {
           { href: "/admin/fines", icon: "💸", label: "미투표자 확인", sub: "이번 달 벌금 대상" },
           { href: "/admin/historical-stats", icon: "📚", label: "역대 기록 관리" },
           { href: "/admin/records-check", icon: "🔍", label: "클린시트 점검", sub: "경기별로 왜 그렇게 잡혔는지" },
+          { href: "/admin/push-status", icon: "🔔", label: "알림 점검", sub: "팀원별 알림 기기 · 테스트 보내기" },
           { href: "/admin/accounts", icon: "🧑‍💼", label: "계정 관리", sub: "가입 계정 확인 · 삭제" },
         ].map((m) => (
           <Link
