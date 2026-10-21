@@ -5,6 +5,9 @@ import { getTeamById } from "@/lib/db";
 // 있으면 그 팀 이름과 로고로 내려주고, 로그인 전이거나 로고가 없으면 기본
 // "Team Manager" 정보를 준다. 팀마다 id가 달라서 한 기기에 여러 팀 앱을 따로
 // 설치할 수 있다.
+// 로그인한 팀마다 내용이 달라서 빌드 때 한 번 만들어 두지 않고 요청마다 만든다.
+export const dynamic = "force-dynamic";
+
 const DEFAULT_ICONS = [
   { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
   { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
