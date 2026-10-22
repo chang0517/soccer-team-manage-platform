@@ -21,6 +21,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  // 구독 주소를 아는 아무나 남의 알림을 끌 수 없게 로그인한 사용자만 허용한다.
+  const session = await getSessionUser();
+  if (!session) return Response.json({ error: "로그인이 필요해요." }, { status: 401 });
   const body = await request.json();
   if (!body?.endpoint) {
     return Response.json({ error: "endpoint가 필요해요." }, { status: 400 });

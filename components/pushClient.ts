@@ -70,3 +70,27 @@ export async function enablePush(): Promise<"ok" | "denied" | "no-key" | "failed
     return "failed";
   }
 }
+
+/**
+ * 이 기기의 알림을 끈다 — 브라우저 구독을 해지하고 서버 목록에서도 지운다.
+ * 브라우저의 알림 허용 자체는 그대로라서, 나중에 "알림 켜기"로 바로 다시 켤 수 있다.
+ */
+export async function disablePush(): Promise<boolean> {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) {
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      await fetch("/api/push/subscribe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint }),
+      }).catch(() => {});
+    }
+    return true;
+  } catch (e) {
+    console.error("[push] disable failed:", e);
+    return false;
+  }
+}
