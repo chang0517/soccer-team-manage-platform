@@ -18,6 +18,7 @@ import type { MatchWeather } from "@/lib/weather";
 import { normalizeRecordLog, summarizeRecordLog } from "@/lib/records";
 import { ATTEND_CAP, isVotingClosed } from "@/lib/rules";
 import {
+  addAttendeesToSquad,
   generateSquad,
   squadStatus,
   splitScrimmageTeams,
@@ -185,6 +186,17 @@ export default function EventDetailPage({
   const otherTeamSquad = activeTeam === "B" ? event.squad : event.scrimmageSquad;
   const canMoveTeam =
     isScrimmage && canEditSquad && !isSquadLocked && squadStatus(otherTeamSquad) !== "confirmed";
+  // 스쿼드를 짠 뒤에 새로 참석 투표한 사람(스쿼드 선발·벤치 어디에도 없는 참석자).
+  // 내전 모드는 팀 배정을 새로 해야 해서 "내전 2팀 다시 나누기"로 처리한다.
+  const squadMemberIds = new Set<number>(
+    currentSquad?.quarters.flatMap((q) => [
+      ...q.starters.flatMap((s) => [s.memberId, s.memberId2]).filter((v): v is number => v != null),
+      ...q.bench,
+    ]) ?? []
+  );
+  const newAttendees = isScrimmage
+    ? []
+    : members.filter((m) => attendIds.includes(m.id) && !squadMemberIds.has(m.id));
   const hasAbsenteeInSquad =
     currentSquad?.quarters.some(
       (q) =>
@@ -407,6 +419,30 @@ export default function EventDetailPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [squadField]: squad }),
     });
+    load();
+  };
+
+  // 스쿼드를 짠 뒤에 참석한 사람을 기존 배치는 건드리지 않고 반영한다: 모든 쿼터
+  // 벤치에 넣고, 비어 있는 자리 중 맞는 곳에 채운다. 구성이 바뀌는 것이라 제출·승인은
+  // 서버가 작성 중으로 되돌린다.
+  const addNewAttendees = async () => {
+    if (!currentSquad || newAttendees.length === 0) return;
+    if (!(await confirmSquadReset())) return;
+    const { squad, placed } = addAttendeesToSquad(currentSquad, newAttendees);
+    const res = await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [squadField]: { ...squad, confirmed: false, approvedBy: [] } }),
+    });
+    if (!res.ok) {
+      toast.error((await res.json().catch(() => null))?.error || "반영하지 못했어요.");
+      return;
+    }
+    const rest = newAttendees.length - placed;
+    toast.success(
+      `${newAttendees.length}명을 스쿼드에 반영했어요` +
+        (rest > 0 ? ` (${rest}명은 빈자리가 없어 벤치에 뒀어요)` : "")
+    );
     load();
   };
 
@@ -935,6 +971,14 @@ export default function EventDetailPage({
                   className="rounded-xl bg-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600"
                 >
                   내전 모드 종료
+                </button>
+              )}
+              {isAdmin && currentSquad && newAttendees.length > 0 && !isSquadLocked && (
+                <button
+                  onClick={addNewAttendees}
+                  className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  신규 참석자 반영 ({newAttendees.length}명)
                 </button>
               )}
               {isAdmin && currentSquad && hasAbsenteeInSquad && !isSquadLocked && (

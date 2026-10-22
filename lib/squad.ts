@@ -510,6 +510,52 @@ export function fillEmptySlots(
   return { squad: { ...squad, quarters }, filled };
 }
 
+/**
+ * 스쿼드를 짠 뒤에 새로 참석한 사람을 반영한다. 이미 짜 놓은(직접 손본 것
+ * 포함) 자리는 그대로 두고, 새로 온 사람은 먼저 모든 쿼터 벤치에 넣은 다음
+ * 비어 있는 자리 중 같은 라인에 맞는 곳에만 채운다(1순위 → 2순위 → 같은
+ * 라인 순, 덜 뛴 사람 먼저, 인당 최대 MAX_AUTO_QUARTERS쿼터). 빈자리가 없으면
+ * 벤치에만 남는다. placed는 선발 자리를 하나라도 받은 사람 수.
+ */
+export function addAttendeesToSquad(
+  squad: SquadData,
+  newcomers: Member[]
+): { squad: SquadData; placed: number } {
+  const counts = squadPlayCounts(squad);
+  const gotSeat = new Set<number>();
+  const newIds = newcomers.map((m) => m.id);
+  const quarters = squad.quarters.map((q) => {
+    const starters = q.starters.map((s) => ({ ...s }));
+    const used = new Set(
+      starters.flatMap((s) => [s.memberId, s.memberId2]).filter((v): v is number => v != null)
+    );
+    for (const s of starters) {
+      if (s.memberId != null || s.memberId2 !== undefined) continue;
+      const pick = newcomers
+        .filter(
+          (m) =>
+            !used.has(m.id) &&
+            (counts.get(m.id) ?? 0) < MAX_AUTO_QUARTERS &&
+            slotFit(s.slotId, m) <= 2
+        )
+        .sort(
+          (a, b) =>
+            slotFit(s.slotId, a) - slotFit(s.slotId, b) ||
+            (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) ||
+            a.name.localeCompare(b.name, "ko")
+        )[0];
+      if (!pick) continue;
+      s.memberId = pick.id;
+      used.add(pick.id);
+      counts.set(pick.id, (counts.get(pick.id) ?? 0) + 1);
+      gotSeat.add(pick.id);
+    }
+    const bench = [...new Set([...q.bench, ...newIds])].filter((id) => !used.has(id));
+    return { starters, bench };
+  });
+  return { squad: { ...squad, quarters }, placed: gotSeat.size };
+}
+
 /** 스쿼드에서 한 선수를 빼낸다(자리는 빈칸, 벤치·승인 목록에서도 제외). */
 export function withoutMember(squad: SquadData, memberId: number): SquadData {
   const drop = (id: number | null | undefined) => (id === memberId ? null : (id ?? null));
