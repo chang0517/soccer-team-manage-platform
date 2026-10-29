@@ -26,6 +26,11 @@ import type {
   VerificationPurpose,
   VoteRow,
   VoteStatus,
+  GpsPitch,
+  GpsSession,
+  GpsTrackDetail,
+  GpsTrackInput,
+  GpsTrackSummary,
 } from "./types";
 
 const globalForPg = globalThis as unknown as {
@@ -266,6 +271,37 @@ async function createTables(client: PoolClient) {
       sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (reminder_id, period)
     );
+    CREATE TABLE IF NOT EXISTS gps_pitches (
+      id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      corners JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS gps_sessions (
+      id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      event_id INTEGER,
+      pitch_id INTEGER,
+      played_on TEXT NOT NULL DEFAULT '',
+      is_sample BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS gps_tracks (
+      id SERIAL PRIMARY KEY,
+      team_id INTEGER NOT NULL,
+      session_id INTEGER NOT NULL,
+      member_id INTEGER,
+      device_id TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'pod',
+      summary JSONB NOT NULL,
+      heatmap JSONB NOT NULL,
+      path JSONB NOT NULL,
+      raw_gz BYTEA,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS gps_tracks_session_idx ON gps_tracks (session_id);
   `);
 }
 
@@ -299,6 +335,7 @@ const TABLES = [
   "comments", "historical_stats", "announcements", "hall_of_fame",
   "opponent_kits", "push_subscriptions", "polls", "poll_options",
   "poll_votes", "phone_verifications", "team_reminders", "reminder_sends", "app_settings",
+  "gps_pitches", "gps_sessions", "gps_tracks",
 ];
 
 // 테이블·컬럼이 이미 지금 스키마대로인지 카탈로그만 읽어서 확인한다.
@@ -516,6 +553,9 @@ export async function deleteTeam(teamId: number) {
     "phone_verifications",
     "reminder_sends",
     "team_reminders",
+    "gps_tracks",
+    "gps_sessions",
+    "gps_pitches",
     "users",
     "events",
     "members",
@@ -1808,4 +1848,211 @@ export async function setPollVote(
   } finally {
     client.release();
   }
+}
+
+// ---------- GPS 포드 분석 ----------
+const toGpsPitch = (r: { id: number; name: string; corners: GpsPitch["corners"]; created_at: string }): GpsPitch => ({
+  id: r.id,
+  name: r.name,
+  corners: r.corners,
+  createdAt: r.created_at,
+});
+
+export async function listGpsPitches(teamId: number): Promise<GpsPitch[]> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT * FROM gps_pitches WHERE team_id=$1 ORDER BY id", [teamId]);
+  return rows.map(toGpsPitch);
+}
+
+export async function getGpsPitch(teamId: number, id: number): Promise<GpsPitch | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT * FROM gps_pitches WHERE team_id=$1 AND id=$2", [teamId, id]);
+  return rows[0] ? toGpsPitch(rows[0]) : null;
+}
+
+export async function createGpsPitch(
+  teamId: number,
+  name: string,
+  corners: GpsPitch["corners"]
+): Promise<GpsPitch> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "INSERT INTO gps_pitches (team_id, name, corners) VALUES ($1,$2,$3) RETURNING *",
+    [teamId, name, JSON.stringify(corners)]
+  );
+  return toGpsPitch(rows[0]);
+}
+
+export async function deleteGpsPitch(teamId: number, id: number) {
+  const pool = await ready();
+  await pool.query("UPDATE gps_sessions SET pitch_id=NULL WHERE team_id=$1 AND pitch_id=$2", [teamId, id]);
+  await pool.query("DELETE FROM gps_pitches WHERE team_id=$1 AND id=$2", [teamId, id]);
+}
+
+type GpsSessionDbRow = {
+  id: number;
+  title: string;
+  event_id: number | null;
+  pitch_id: number | null;
+  played_on: string;
+  is_sample: boolean;
+  created_at: string;
+  track_count: string | number;
+};
+
+const toGpsSession = (r: GpsSessionDbRow): GpsSession => ({
+  id: r.id,
+  title: r.title,
+  eventId: r.event_id,
+  pitchId: r.pitch_id,
+  playedOn: r.played_on,
+  isSample: r.is_sample,
+  trackCount: Number(r.track_count),
+  createdAt: r.created_at,
+});
+
+const GPS_SESSION_SELECT = `SELECT s.*, (SELECT COUNT(*) FROM gps_tracks t WHERE t.session_id=s.id) AS track_count
+  FROM gps_sessions s`;
+
+export async function listGpsSessions(teamId: number): Promise<GpsSession[]> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    `${GPS_SESSION_SELECT} WHERE s.team_id=$1 ORDER BY s.played_on DESC, s.id DESC`,
+    [teamId]
+  );
+  return rows.map(toGpsSession);
+}
+
+export async function getGpsSession(teamId: number, id: number): Promise<GpsSession | null> {
+  const pool = await ready();
+  const { rows } = await pool.query(`${GPS_SESSION_SELECT} WHERE s.team_id=$1 AND s.id=$2`, [teamId, id]);
+  return rows[0] ? toGpsSession(rows[0]) : null;
+}
+
+export async function createGpsSession(
+  teamId: number,
+  s: { title: string; eventId: number | null; pitchId: number | null; playedOn: string; isSample: boolean }
+): Promise<GpsSession> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "INSERT INTO gps_sessions (team_id, title, event_id, pitch_id, played_on, is_sample) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
+    [teamId, s.title, s.eventId, s.pitchId, s.playedOn, s.isSample]
+  );
+  return (await getGpsSession(teamId, rows[0].id)) as GpsSession;
+}
+
+export async function setGpsSessionPitch(teamId: number, id: number, pitchId: number | null) {
+  const pool = await ready();
+  await pool.query("UPDATE gps_sessions SET pitch_id=$1 WHERE team_id=$2 AND id=$3", [pitchId, teamId, id]);
+}
+
+export async function deleteGpsSession(teamId: number, id: number) {
+  const pool = await ready();
+  await pool.query("DELETE FROM gps_tracks WHERE team_id=$1 AND session_id=$2", [teamId, id]);
+  await pool.query("DELETE FROM gps_sessions WHERE team_id=$1 AND id=$2", [teamId, id]);
+}
+
+type GpsTrackDbRow = {
+  id: number;
+  session_id: number;
+  member_id: number | null;
+  device_id: string;
+  source: "pod" | "gpx";
+  summary: { frame: GpsTrackSummary["frame"]; metrics: GpsTrackSummary["metrics"] };
+  heatmap: GpsTrackDetail["heatmap"];
+  path: GpsTrackDetail["path"];
+  created_at: string;
+};
+
+const toGpsTrack = (r: GpsTrackDbRow): GpsTrackSummary => ({
+  id: r.id,
+  sessionId: r.session_id,
+  memberId: r.member_id,
+  deviceId: r.device_id,
+  source: r.source,
+  frame: r.summary.frame,
+  metrics: r.summary.metrics,
+  createdAt: r.created_at,
+});
+
+const GPS_TRACK_LIGHT = "id, session_id, member_id, device_id, source, summary, created_at";
+
+export async function listGpsTracks(teamId: number, sessionId: number): Promise<GpsTrackSummary[]> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    `SELECT ${GPS_TRACK_LIGHT} FROM gps_tracks WHERE team_id=$1 AND session_id=$2 ORDER BY id`,
+    [teamId, sessionId]
+  );
+  return rows.map(toGpsTrack);
+}
+
+export async function getGpsTrack(
+  teamId: number,
+  sessionId: number,
+  id: number
+): Promise<GpsTrackDetail | null> {
+  const pool = await ready();
+  const { rows } = await pool.query(
+    "SELECT * FROM gps_tracks WHERE team_id=$1 AND session_id=$2 AND id=$3",
+    [teamId, sessionId, id]
+  );
+  if (!rows[0]) return null;
+  return { ...toGpsTrack(rows[0]), heatmap: rows[0].heatmap, path: rows[0].path };
+}
+
+export async function getGpsTrackRaw(teamId: number, id: number): Promise<Buffer | null> {
+  const pool = await ready();
+  const { rows } = await pool.query("SELECT raw_gz FROM gps_tracks WHERE team_id=$1 AND id=$2", [teamId, id]);
+  return rows[0]?.raw_gz ?? null;
+}
+
+// 같은 세션에 같은 선수의 로그를 다시 올리면 이전 것을 대체한다.
+export async function createGpsTrack(teamId: number, t: GpsTrackInput): Promise<number> {
+  const pool = await ready();
+  if (t.memberId !== null) {
+    await pool.query("DELETE FROM gps_tracks WHERE team_id=$1 AND session_id=$2 AND member_id=$3", [
+      teamId,
+      t.sessionId,
+      t.memberId,
+    ]);
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO gps_tracks (team_id, session_id, member_id, device_id, source, summary, heatmap, path, raw_gz)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [
+      teamId,
+      t.sessionId,
+      t.memberId,
+      t.deviceId,
+      t.source,
+      JSON.stringify({ frame: t.analysis.frame, metrics: t.analysis.metrics }),
+      JSON.stringify(t.analysis.heatmap),
+      JSON.stringify(t.analysis.path),
+      t.rawGz,
+    ]
+  );
+  return rows[0].id;
+}
+
+export async function replaceGpsTrackAnalysis(
+  teamId: number,
+  id: number,
+  analysis: GpsTrackInput["analysis"]
+) {
+  const pool = await ready();
+  await pool.query(
+    "UPDATE gps_tracks SET summary=$1, heatmap=$2, path=$3 WHERE team_id=$4 AND id=$5",
+    [
+      JSON.stringify({ frame: analysis.frame, metrics: analysis.metrics }),
+      JSON.stringify(analysis.heatmap),
+      JSON.stringify(analysis.path),
+      teamId,
+      id,
+    ]
+  );
+}
+
+export async function deleteGpsTrack(teamId: number, sessionId: number, id: number) {
+  const pool = await ready();
+  await pool.query("DELETE FROM gps_tracks WHERE team_id=$1 AND session_id=$2 AND id=$3", [teamId, sessionId, id]);
 }

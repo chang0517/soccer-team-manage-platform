@@ -162,6 +162,10 @@ export default function AccountPage() {
         </div>
       )}
 
+      <Link href="/gps" className="card pressable block p-4 text-sm font-semibold text-blue-700">
+        GPS 경기 분석 →
+      </Link>
+
       <NotificationSettings />
 
       {user.isMaster && (

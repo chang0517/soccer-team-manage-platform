@@ -27,6 +27,11 @@ import type {
   VerificationPurpose,
   VoteRow,
   VoteStatus,
+  GpsPitch,
+  GpsSession,
+  GpsTrackDetail,
+  GpsTrackInput,
+  GpsTrackSummary,
 } from "./types";
 
 // DATABASE_URL이 있으면 Postgres(Supabase), 없으면 로컬 SQLite를 쓴다.
@@ -514,4 +519,68 @@ export async function setPollVote(
   return usePg
     ? pg.setPollVote(teamId, pollId, memberId, optionIds)
     : sqlite.setPollVote(teamId, pollId, memberId, optionIds);
+}
+
+// ---------- GPS 포드 분석 ----------
+export async function listGpsPitches(teamId: number): Promise<GpsPitch[]> {
+  return usePg ? pg.listGpsPitches(teamId) : sqlite.listGpsPitches(teamId);
+}
+export async function getGpsPitch(teamId: number, id: number): Promise<GpsPitch | null> {
+  return usePg ? pg.getGpsPitch(teamId, id) : sqlite.getGpsPitch(teamId, id);
+}
+export async function createGpsPitch(
+  teamId: number,
+  name: string,
+  corners: GpsPitch["corners"]
+): Promise<GpsPitch> {
+  return usePg ? pg.createGpsPitch(teamId, name, corners) : sqlite.createGpsPitch(teamId, name, corners);
+}
+export async function deleteGpsPitch(teamId: number, id: number) {
+  return usePg ? pg.deleteGpsPitch(teamId, id) : sqlite.deleteGpsPitch(teamId, id);
+}
+export async function listGpsSessions(teamId: number): Promise<GpsSession[]> {
+  return usePg ? pg.listGpsSessions(teamId) : sqlite.listGpsSessions(teamId);
+}
+export async function getGpsSession(teamId: number, id: number): Promise<GpsSession | null> {
+  return usePg ? pg.getGpsSession(teamId, id) : sqlite.getGpsSession(teamId, id);
+}
+export async function createGpsSession(
+  teamId: number,
+  s: { title: string; eventId: number | null; pitchId: number | null; playedOn: string; isSample: boolean }
+): Promise<GpsSession> {
+  return usePg ? pg.createGpsSession(teamId, s) : sqlite.createGpsSession(teamId, s);
+}
+export async function setGpsSessionPitch(teamId: number, id: number, pitchId: number | null) {
+  return usePg ? pg.setGpsSessionPitch(teamId, id, pitchId) : sqlite.setGpsSessionPitch(teamId, id, pitchId);
+}
+export async function deleteGpsSession(teamId: number, id: number) {
+  return usePg ? pg.deleteGpsSession(teamId, id) : sqlite.deleteGpsSession(teamId, id);
+}
+export async function listGpsTracks(teamId: number, sessionId: number): Promise<GpsTrackSummary[]> {
+  return usePg ? pg.listGpsTracks(teamId, sessionId) : sqlite.listGpsTracks(teamId, sessionId);
+}
+export async function getGpsTrack(
+  teamId: number,
+  sessionId: number,
+  id: number
+): Promise<GpsTrackDetail | null> {
+  return usePg ? pg.getGpsTrack(teamId, sessionId, id) : sqlite.getGpsTrack(teamId, sessionId, id);
+}
+export async function getGpsTrackRaw(teamId: number, id: number): Promise<Buffer | null> {
+  return usePg ? pg.getGpsTrackRaw(teamId, id) : sqlite.getGpsTrackRaw(teamId, id);
+}
+export async function createGpsTrack(teamId: number, t: GpsTrackInput): Promise<number> {
+  return usePg ? pg.createGpsTrack(teamId, t) : sqlite.createGpsTrack(teamId, t);
+}
+export async function replaceGpsTrackAnalysis(
+  teamId: number,
+  id: number,
+  analysis: GpsTrackInput["analysis"]
+) {
+  return usePg
+    ? pg.replaceGpsTrackAnalysis(teamId, id, analysis)
+    : sqlite.replaceGpsTrackAnalysis(teamId, id, analysis);
+}
+export async function deleteGpsTrack(teamId: number, sessionId: number, id: number) {
+  return usePg ? pg.deleteGpsTrack(teamId, sessionId, id) : sqlite.deleteGpsTrack(teamId, sessionId, id);
 }

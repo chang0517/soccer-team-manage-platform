@@ -1,3 +1,5 @@
+import type { Heatmap, PitchCorners, TrackAnalysis, TrackMetrics, TrackPath } from "./gps/types";
+
 // 랭킹 점수 배율. 팀마다 선수단 성향이 달라서(예: 수비 중심 팀은 클린시트
 // 배율을 더 높이고 싶어할 수 있음) team별로 다르게 설정할 수 있다.
 export interface ScoreRules {
@@ -371,3 +373,49 @@ export interface PollDetail extends Poll {
   voterCount: number;
   myOptionIds: number[];
 }
+
+// ---------- GPS 포드 분석 ----------
+// 계산 로직과 원시 타입은 lib/gps 에 있고, 여기에는 DB·API 모양만 둔다.
+
+export type GpsPitch = {
+  id: number;
+  name: string;
+  corners: PitchCorners;
+  createdAt: string;
+};
+
+export type GpsSession = {
+  id: number;
+  title: string;
+  eventId: number | null;
+  pitchId: number | null;
+  /** 경기한 날(YYYY-MM-DD). */
+  playedOn: string;
+  /** 시뮬레이션으로 만든 예시 세션인지. */
+  isSample: boolean;
+  trackCount: number;
+  createdAt: string;
+};
+
+export type GpsTrackSummary = {
+  id: number;
+  sessionId: number;
+  memberId: number | null;
+  deviceId: string;
+  source: "pod" | "gpx";
+  frame: TrackAnalysis["frame"];
+  metrics: TrackMetrics;
+  createdAt: string;
+};
+
+export type GpsTrackDetail = GpsTrackSummary & { heatmap: Heatmap; path: TrackPath };
+
+/** 새 트랙을 저장할 때 넘기는 값. rawGz는 다시 분석할 때 쓰려고 gzip 원본을 보관한다. */
+export type GpsTrackInput = {
+  sessionId: number;
+  memberId: number | null;
+  deviceId: string;
+  source: "pod" | "gpx";
+  analysis: TrackAnalysis;
+  rawGz: Buffer | null;
+};
