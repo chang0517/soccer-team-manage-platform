@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LayoutGroup, motion } from "motion/react";
 import HallOfFameSection from "@/components/HallOfFameSection";
+import TeamResultsSection from "@/components/TeamResultsSection";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 import { useSession } from "@/components/useSession";
 import type { PosCategory, RankingRow } from "@/lib/types";
@@ -12,6 +13,7 @@ import { seasonLabel } from "@/lib/season";
 const VIEW_TABS = [
   { key: "ranking" as const, label: "시즌 랭킹" },
   { key: "hof" as const, label: "명예의 전당" },
+  { key: "results" as const, label: "팀 승률" },
 ];
 
 const TABS: { key: PosCategory | "ALL"; label: string }[] = [
@@ -90,7 +92,7 @@ export default function RankingPage() {
   const [tab, setTab] = useState<PosCategory | "ALL">("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [view, setView] = useState<"ranking" | "hof">("ranking");
+  const [view, setView] = useState<"ranking" | "hof" | "results">("ranking");
 
   useEffect(() => {
     fetch("/api/ranking/seasons")
@@ -149,6 +151,8 @@ export default function RankingPage() {
       <Segmented id="view" items={VIEW_TABS} value={view} onChange={setView} />
 
       {view === "hof" && <HallOfFameSection />}
+
+      {view === "results" && <TeamResultsSection />}
 
       {view === "ranking" && (
         <>
