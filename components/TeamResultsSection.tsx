@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { seasonLabel } from "@/lib/season";
 import { computeTeamResults } from "@/lib/results";
 import type { Outcome } from "@/lib/results";
@@ -33,7 +34,7 @@ export default function TeamResultsSection() {
   const data = useMemo(() => (events ? computeTeamResults(events, season) : null), [events, season]);
 
   if (!data) return <div className="card h-40 animate-pulse bg-zinc-100" />;
-  const { overall, opponents, recent, noOpponent } = data;
+  const { overall, opponents, recent, noOpponent, excluded } = data;
 
   return (
     <div className="space-y-4">
@@ -132,6 +133,25 @@ export default function TeamResultsSection() {
               </ul>
             )}
           </section>
+
+          {excluded.length > 0 && (
+            <details className="card p-4 text-sm">
+              <summary className="cursor-pointer font-bold text-zinc-600">
+                집계에서 빠진 경기 {excluded.length}개 (이유 보기)
+              </summary>
+              <ul className="mt-3 space-y-1.5">
+                {excluded.map((x) => (
+                  <li key={x.eventId} className="text-xs leading-relaxed">
+                    <Link href={`/events/${x.eventId}`} className="font-bold text-blue-700">
+                      {x.date} {x.title}
+                      {x.opponent ? ` vs ${x.opponent}` : ""}
+                    </Link>
+                    <span className="block text-zinc-500">{x.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           <p className="px-1 text-xs leading-relaxed text-zinc-400">
             득점과 쿼터별 실점이 모두 입력된 경기만 집계해요. 내전·훈련은 빼고, 무승부도 한 경기로 세요(승률 = 승 ÷ 전체 경기).

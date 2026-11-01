@@ -70,6 +70,26 @@ export function tally(results: MatchResult[]): Record3 {
   };
 }
 
+export interface ExcludedMatch {
+  eventId: number;
+  date: string;
+  title: string;
+  opponent: string;
+  reason: string;
+}
+
+/** 이미 치른 경기인데 승률에 못 넣은 이유(내전·훈련, 쿼터 실점 미입력, 점수 없음). */
+export function whyExcluded(ev: EventItem): string | null {
+  if (ev.type !== "match" || ev.date > todayStr()) return null;
+  if (matchResultOf(ev)) return null;
+  if (!isOfficialMatch(ev)) return "내전·훈련은 승률에서 빼요";
+  if (ev.recordLog) {
+    const empty = normalizeRecordLog(ev.recordLog).filter((q) => q.conceded == null).length;
+    return `쿼터 실점이 ${empty}개 입력되지 않았어요`;
+  }
+  return "점수가 입력되지 않았어요";
+}
+
 /** 전체 전적, 상대팀별 전적, 최근 경기 — season이 null이면 역대 전체. */
 export function computeTeamResults(events: EventItem[], season: number | null) {
   const results = events
@@ -95,5 +115,15 @@ export function computeTeamResults(events: EventItem[], season: number | null) {
     .map((g) => ({ name: g.name, ...tally(g.results), last: g.results[0].outcome }))
     .sort((a, b) => b.games - a.games || (b.winRate ?? 0) - (a.winRate ?? 0) || a.name.localeCompare(b.name, "ko"));
 
-  return { overall: tally(results), opponents, recent: results.slice(0, 5), noOpponent };
+  const excluded: ExcludedMatch[] = events
+    .filter((e) => season == null || seasonOf(e.date) === season)
+    .flatMap((e) => {
+      const reason = whyExcluded(e);
+      return reason
+        ? [{ eventId: e.id, date: e.date, title: e.title, opponent: e.opponent, reason }]
+        : [];
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return { overall: tally(results), opponents, recent: results.slice(0, 5), noOpponent, excluded };
 }
