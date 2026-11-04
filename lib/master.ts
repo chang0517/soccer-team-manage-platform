@@ -17,6 +17,16 @@ export function masterConfigured(): boolean {
   return masterIdentities().size > 0;
 }
 
+/** 그 아이디가 마스터 목록에 올라 있는 팀 코드들(로그인 화면에서 마스터 계정 후보를 찾을 때 쓴다). */
+export function masterTeamSlugsFor(username: string): string[] {
+  const out: string[] = [];
+  for (const ident of masterIdentities()) {
+    const i = ident.indexOf(":");
+    if (i > 0 && ident.slice(i + 1) === username.trim().toLowerCase()) out.push(ident.slice(0, i));
+  }
+  return out;
+}
+
 export function isMasterIdentity(teamSlug: string, username: string): boolean {
   return masterIdentities().has(`${teamSlug}:${username}`.toLowerCase());
 }
