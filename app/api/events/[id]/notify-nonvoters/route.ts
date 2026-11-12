@@ -1,6 +1,13 @@
 import { requireAdmin } from "@/lib/auth";
-import { getEvent, getTeamById, getVotes, listMembers } from "@/lib/db";
-import { formatDate } from "@/lib/format";
+import {
+  getAppSetting,
+  getEvent,
+  getTeamById,
+  getVotes,
+  listMembers,
+  setAppSetting,
+} from "@/lib/db";
+import { formatDate, todayStr } from "@/lib/format";
 import { sendSms } from "@/lib/sms";
 
 export async function POST(
@@ -11,6 +18,27 @@ export async function POST(
   if (!admin) {
     return Response.json({ error: "운영진만 보낼 수 있어요." }, { status: 403 });
   }
+
+  // 문자는 비용·피로 때문에 매월 1일(한국 시간)에, 팀당 달마다 한 번만 보낸다.
+  // 한 번 보낸 달에는 다른 일정에서 눌러도 다시 나가지 않는다.
+  const today = todayStr();
+  if (today.slice(8, 10) !== "01") {
+    return Response.json(
+      { error: "미투표자 문자는 매월 1일에만 보낼 수 있어요." },
+      { status: 403 }
+    );
+  }
+  const month = today.slice(0, 7);
+  const settingKey = `nonvoter_sms_month_${admin.teamId}`;
+  const previous = await getAppSetting(settingKey).catch(() => null);
+  if (previous === month) {
+    return Response.json(
+      { error: "이번 달에는 이미 문자를 보냈어요. 다음 달 1일에 다시 보낼 수 있어요." },
+      { status: 409 }
+    );
+  }
+  // 두 번 눌러도 한 번만 나가도록 보내기 전에 먼저 이번 달로 표시해 둔다.
+  await setAppSetting(settingKey, month);
 
   const { id } = await params;
   const event = await getEvent(admin.teamId, Number(id));
@@ -44,6 +72,9 @@ export async function POST(
       failed.push(m.name);
     }
   }
+
+  // 한 명도 못 보냈으면(연결 문제 등) 이번 달 발송으로 치지 않고 다시 시도할 수 있게 되돌린다.
+  if (sent.length === 0) await setAppSetting(settingKey, previous ?? "");
 
   return Response.json({ sent, failed, skippedNoPhone });
 }

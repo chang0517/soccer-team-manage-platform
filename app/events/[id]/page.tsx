@@ -12,7 +12,7 @@ import MvpVoteSection from "@/components/MvpVoteSection";
 import SquadEditor from "@/components/SquadEditor";
 import VoteButtons from "@/components/VoteButtons";
 import { useSession } from "@/components/useSession";
-import { formatDate, dDayLabel } from "@/lib/format";
+import { formatDate, dDayLabel, todayStr } from "@/lib/format";
 import { WEATHER_EMOJI } from "@/lib/weather";
 import type { MatchWeather } from "@/lib/weather";
 import { normalizeRecordLog, summarizeRecordLog } from "@/lib/records";
@@ -741,13 +741,19 @@ export default function EventDetailPage({
           )}
           {isAdmin && nonVoters.length > 0 && (
             <div className="mt-1.5">
-              <button
-                onClick={notifyNonVoters}
-                disabled={notifying}
-                className="rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-              >
-                {notifying ? "발송 중…" : "미투표자에게 문자 보내기"}
-              </button>
+              {todayStr().slice(8, 10) === "01" ? (
+                <button
+                  onClick={notifyNonVoters}
+                  disabled={notifying}
+                  className="rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  {notifying ? "발송 중…" : "미투표자에게 문자 보내기"}
+                </button>
+              ) : (
+                <p className="text-xs text-zinc-400">
+                  미투표자 문자는 매월 1일에만(한 달에 한 번) 보낼 수 있어요.
+                </p>
+              )}
               {notifyResult && (
                 <p className="mt-1 text-xs text-zinc-500">{notifyResult}</p>
               )}
