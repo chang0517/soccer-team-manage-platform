@@ -339,6 +339,35 @@ export default function PollsPage() {
                 })}
               </div>
 
+              <details className="mt-3 rounded-2xl bg-zinc-50 p-3 text-xs">
+                <summary className="cursor-pointer font-bold text-zinc-600">
+                  투표 현황 · 투표 {poll.voterCount}명 / 미투표 {poll.nonVoters.length}명
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="mb-1 font-bold text-zinc-500">투표자별 선택</p>
+                    {poll.voterChoices.length === 0 ? (
+                      <p className="text-zinc-400">아직 투표한 사람이 없어요.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {poll.voterChoices.map((v) => (
+                          <li key={v.name} className="flex gap-2">
+                            <span className="w-16 shrink-0 font-semibold text-zinc-700">{v.name}</span>
+                            <span className="text-zinc-500">{v.options.join(", ")}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <p className="mb-1 font-bold text-zinc-500">미투표자 ({poll.nonVoters.length}명)</p>
+                    <p className="leading-relaxed text-zinc-500">
+                      {poll.nonVoters.length > 0 ? poll.nonVoters.join(", ") : "전원이 투표했어요 🎉"}
+                    </p>
+                  </div>
+                </div>
+              </details>
+
               {canManage && !poll.closed && (
                 <div className="mt-2 flex gap-2">
                   <input

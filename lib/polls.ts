@@ -36,6 +36,23 @@ export function buildPollDetails(
     }
     for (const names of Object.values(optionVoters)) names.sort((a, b) => a.localeCompare(b, "ko"));
     const voterCount = new Set(pollVotes.map((v) => v.memberId)).size;
+    const labelById = new Map((optionsByPoll.get(poll.id) ?? []).map((o) => [o.id, o.label]));
+    const choicesByMember = new Map<number, string[]>();
+    for (const v of pollVotes) {
+      const list = choicesByMember.get(v.memberId) ?? [];
+      list.push(labelById.get(v.optionId) ?? "?");
+      choicesByMember.set(v.memberId, list);
+    }
+    const voterChoices = [...choicesByMember.entries()]
+      .map(([memberId, labels]) => ({
+        name: memberById.get(memberId)?.name ?? "알 수 없음",
+        options: labels,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    const nonVoters = members
+      .filter((m) => !m.isGuest && !choicesByMember.has(m.id))
+      .map((m) => m.name)
+      .sort((a, b) => a.localeCompare(b, "ko"));
     const myOptionIds =
       viewerMemberId == null
         ? []
@@ -46,6 +63,8 @@ export function buildPollDetails(
       options: (optionsByPoll.get(poll.id) ?? []).slice().sort((a, b) => a.order - b.order),
       voteCounts,
       optionVoters,
+      voterChoices,
+      nonVoters,
       voterCount,
       myOptionIds,
     };

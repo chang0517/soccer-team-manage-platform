@@ -368,6 +368,9 @@ export interface PollDetail extends Poll {
   options: PollOption[];
   voteCounts: Record<number, number>;
   optionVoters: Record<number, string[]>;
+  // 투표자별로 고른 선택지(이름순)와, 아직 투표하지 않은 정식 멤버(용병 제외, 이름순).
+  voterChoices: { name: string; options: string[] }[];
+  nonVoters: string[];
   voterCount: number;
   myOptionIds: number[];
 }
