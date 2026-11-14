@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { getTeamById, updateTeamFineSettings, updateTeamScoreRules } from "@/lib/db";
+import { getSmsDay, setSmsDay } from "@/lib/smsSchedule";
 
 export async function GET() {
   const admin = await requireAdmin();
@@ -8,7 +9,7 @@ export async function GET() {
   }
   const team = await getTeamById(admin.teamId);
   if (!team) return Response.json({ error: "팀을 찾을 수 없어요." }, { status: 404 });
-  return Response.json(team);
+  return Response.json({ ...team, smsDay: await getSmsDay(admin.teamId) });
 }
 
 export async function PATCH(request: Request) {
@@ -42,8 +43,15 @@ export async function PATCH(request: Request) {
       }
       await updateTeamScoreRules(admin.teamId, patch);
     }
+    if (body?.smsDay !== undefined) {
+      const day = Math.floor(Number(body.smsDay));
+      if (!Number.isFinite(day) || day < 1 || day > 28) {
+        return Response.json({ error: "문자 발송일은 1~28일 중에서 골라 주세요." }, { status: 400 });
+      }
+      await setSmsDay(admin.teamId, day);
+    }
     const team = await getTeamById(admin.teamId);
-    return Response.json(team);
+    return Response.json(team ? { ...team, smsDay: await getSmsDay(admin.teamId) } : team);
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : "저장에 실패했어요." },

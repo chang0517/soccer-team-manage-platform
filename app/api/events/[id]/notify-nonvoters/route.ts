@@ -8,6 +8,7 @@ import {
   setAppSetting,
 } from "@/lib/db";
 import { formatDate, todayStr } from "@/lib/format";
+import { getSmsDay } from "@/lib/smsSchedule";
 import { sendSms } from "@/lib/sms";
 
 export async function POST(
@@ -19,12 +20,14 @@ export async function POST(
     return Response.json({ error: "운영진만 보낼 수 있어요." }, { status: 403 });
   }
 
-  // 문자는 비용·피로 때문에 매월 1일(한국 시간)에, 팀당 달마다 한 번만 보낸다.
-  // 한 번 보낸 달에는 다른 일정에서 눌러도 다시 나가지 않는다.
+  // 문자는 비용·피로 때문에 운영진이 정한 날(팀 설정의 문자 발송일, 기본 매월 1일,
+  // 한국 시간)에 팀당 달마다 한 번만 보낸다. 한 번 보낸 달에는 다른 일정에서 눌러도
+  // 다시 나가지 않는다.
   const today = todayStr();
-  if (today.slice(8, 10) !== "01") {
+  const smsDay = await getSmsDay(admin.teamId);
+  if (Number(today.slice(8, 10)) !== smsDay) {
     return Response.json(
-      { error: "미투표자 문자는 매월 1일에만 보낼 수 있어요." },
+      { error: `미투표자 문자는 매월 ${smsDay}일에만 보낼 수 있어요.` },
       { status: 403 }
     );
   }
@@ -33,7 +36,7 @@ export async function POST(
   const previous = await getAppSetting(settingKey).catch(() => null);
   if (previous === month) {
     return Response.json(
-      { error: "이번 달에는 이미 문자를 보냈어요. 다음 달 1일에 다시 보낼 수 있어요." },
+      { error: `이번 달에는 이미 문자를 보냈어요. 다음 달 ${smsDay}일에 다시 보낼 수 있어요.` },
       { status: 409 }
     );
   }

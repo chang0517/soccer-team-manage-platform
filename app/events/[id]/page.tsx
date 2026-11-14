@@ -739,9 +739,14 @@ export default function EventDetailPage({
               미투표 {nonVoters.length}명: {nonVoters.map((m) => m.name).join(", ")}
             </p>
           )}
+          {!isAdmin && nonVoters.length > 0 && (
+            <p className="text-[11px] text-zinc-400">
+              투표하지 않은 분께는 매월 {user?.teamSmsDay ?? 1}일에 문자 안내가 나가요.
+            </p>
+          )}
           {isAdmin && nonVoters.length > 0 && (
             <div className="mt-1.5">
-              {todayStr().slice(8, 10) === "01" ? (
+              {Number(todayStr().slice(8, 10)) === (user?.teamSmsDay ?? 1) ? (
                 <button
                   onClick={notifyNonVoters}
                   disabled={notifying}
@@ -751,7 +756,7 @@ export default function EventDetailPage({
                 </button>
               ) : (
                 <p className="text-xs text-zinc-400">
-                  미투표자 문자는 매월 1일에만(한 달에 한 번) 보낼 수 있어요.
+                  미투표자 문자는 매월 {user?.teamSmsDay ?? 1}일에만(한 달에 한 번) 보낼 수 있어요.
                 </p>
               )}
               {notifyResult && (

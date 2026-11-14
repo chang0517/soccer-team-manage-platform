@@ -1,6 +1,7 @@
 import { getSessionUser } from "@/lib/auth";
 import { getTeamById, getUserById } from "@/lib/db";
 import { isMasterAccount, isMasterIdentity } from "@/lib/master";
+import { getSmsDay } from "@/lib/smsSchedule";
 import { DEFAULT_SCORE_RULES } from "@/lib/types";
 
 export async function GET() {
@@ -26,6 +27,7 @@ export async function GET() {
         teamName: team.name,
         teamLogoUrl: team.logoUrl ?? null,
         teamScoreRules: team.scoreRules ?? DEFAULT_SCORE_RULES,
+        teamSmsDay: await getSmsDay(team.id),
         username: home.username,
         displayName: home.displayName,
         role: "admin",
@@ -50,6 +52,7 @@ export async function GET() {
       teamName: team?.name ?? "",
       teamLogoUrl: team?.logoUrl ?? null,
       teamScoreRules: team?.scoreRules ?? DEFAULT_SCORE_RULES,
+      teamSmsDay: team ? await getSmsDay(team.id) : 1,
       username: user.username,
       displayName: user.displayName,
       role: user.role,

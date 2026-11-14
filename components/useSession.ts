@@ -8,6 +8,7 @@ type MeUser = SessionUser & {
   teamSlug?: string | null;
   teamLogoUrl: string | null;
   teamScoreRules?: ScoreRules;
+  teamSmsDay?: number;
   isMaster?: boolean;
   masterVisit?: boolean;
 };

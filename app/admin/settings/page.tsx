@@ -36,6 +36,7 @@ export default function TeamSettingsPage() {
   const [team, setTeam] = useState<TeamRow | null>(null);
   const [fineAccount, setFineAccount] = useState("");
   const [fineAmount, setFineAmount] = useState("");
+  const [smsDay, setSmsDay] = useState("1");
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -45,8 +46,9 @@ export default function TeamSettingsPage() {
   const load = () =>
     fetch("/api/admin/team-settings")
       .then((r) => r.json())
-      .then((t: TeamRow) => {
+      .then((t: TeamRow & { smsDay?: number }) => {
         setTeam(t);
+        setSmsDay(String(t.smsDay ?? 1));
         setFineAccount(t.fineAccount ?? "");
         setFineAmount(t.fineAmount ?? "");
         setScoreDrafts(
@@ -113,7 +115,7 @@ export default function TeamSettingsPage() {
       const res = await fetch("/api/admin/team-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fineAccount, fineAmount, scoreRules }),
+        body: JSON.stringify({ fineAccount, fineAmount, scoreRules, smsDay: Number(smsDay) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -158,6 +160,29 @@ export default function TeamSettingsPage() {
             value={fineAmount}
             onChange={(e) => setFineAmount(e.target.value)}
           />
+        </label>
+      </div>
+
+      <div className="space-y-3 card p-4">
+        <h2 className="text-sm font-bold">미투표자 문자 발송일</h2>
+        <p className="text-xs text-zinc-500">
+          문자는 한 달에 한 번, 여기서 정한 날에만 보낼 수 있어요. 팀원들에게도 일정 화면에
+          이 날짜가 안내돼요.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-semibold text-zinc-600">
+          매월
+          <select
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+            value={smsDay}
+            onChange={(e) => setSmsDay(e.target.value)}
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                {d}일
+              </option>
+            ))}
+          </select>
+          (한국 시간 기준)
         </label>
       </div>
 

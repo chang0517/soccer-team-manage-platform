@@ -192,6 +192,30 @@ function ApprovalCard({
   );
 }
 
+// 운영진 메뉴: 팀 전체를 다루는 일과 선수(팀원)를 다루는 일을 나눠서 보여준다.
+const ADMIN_MENU_GROUPS: {
+  title: string;
+  items: { href: string; icon: string; label: string; sub?: string }[];
+}[] = [
+  {
+    title: "팀 관리",
+    items: [
+      { href: "/admin/settings", icon: "⚙️", label: "팀 설정", sub: "벌금 · 점수 배율 · 정기 알림 · 문자 발송일" },
+      { href: "/admin/fines", icon: "💸", label: "미투표자 확인", sub: "이번 달 벌금 대상" },
+      { href: "/admin/historical-stats", icon: "📚", label: "역대 기록 관리" },
+    ],
+  },
+  {
+    title: "선수 관리",
+    items: [
+      { href: "/members", icon: "👥", label: "선수 명단 관리" },
+      { href: "/admin/members/import", icon: "📥", label: "멤버 일괄 등록" },
+      { href: "/admin/accounts", icon: "🧑‍💼", label: "계정 관리", sub: "가입 계정 확인 · 삭제" },
+      { href: "/admin/push-status", icon: "🔔", label: "알림 점검", sub: "팀원별 알림 기기 · 테스트 보내기" },
+    ],
+  },
+];
+
 export default function AdminPage() {
   const { user, loading } = useSession();
   const [pending, setPending] = useState<AppUser[]>([]);
@@ -299,32 +323,28 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <h1 className="px-1 text-[22px] font-extrabold tracking-tight">운영진</h1>
-      <div className="stagger grid grid-cols-2 gap-2.5">
-        {[
-          { href: "/members", icon: "👥", label: "선수 명단 관리" },
-          { href: "/admin/members/import", icon: "📥", label: "멤버 일괄 등록" },
-          { href: "/admin/settings", icon: "⚙️", label: "팀 설정", sub: "벌금 · 점수 배율" },
-          { href: "/admin/fines", icon: "💸", label: "미투표자 확인", sub: "이번 달 벌금 대상" },
-          { href: "/admin/historical-stats", icon: "📚", label: "역대 기록 관리" },
-          { href: "/admin/records-check", icon: "🔍", label: "클린시트 점검", sub: "경기별로 왜 그렇게 잡혔는지" },
-          { href: "/admin/push-status", icon: "🔔", label: "알림 점검", sub: "팀원별 알림 기기 · 테스트 보내기" },
-          { href: "/admin/accounts", icon: "🧑‍💼", label: "계정 관리", sub: "가입 계정 확인 · 삭제" },
-        ].map((m) => (
-          <Link
-            key={m.href}
-            href={m.href}
-            className="pressable card flex items-center gap-3 p-3.5 hover:bg-zinc-50"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-xl">
-              {m.icon}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-extrabold">{m.label}</span>
-              {m.sub && <span className="block text-[11px] text-zinc-400">{m.sub}</span>}
-            </span>
-          </Link>
-        ))}
-      </div>
+      {ADMIN_MENU_GROUPS.map((g) => (
+        <section key={g.title} className="space-y-2">
+          <h2 className="px-1 text-sm font-bold text-zinc-500">{g.title}</h2>
+          <div className="stagger grid grid-cols-2 gap-2.5">
+            {g.items.map((m) => (
+              <Link
+                key={m.href}
+                href={m.href}
+                className="pressable card flex items-center gap-3 p-3.5 hover:bg-zinc-50"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-xl">
+                  {m.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-extrabold">{m.label}</span>
+                  {m.sub && <span className="block text-[11px] text-zinc-400">{m.sub}</span>}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
       <h2 className="px-1 pt-2 text-lg font-extrabold tracking-tight">가입 승인</h2>
       <p className="px-1 text-sm text-zinc-500">
         가입 신청자가 실제 팀원인지 이름을 보고 확인한 다음, 기존 멤버와
