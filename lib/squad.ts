@@ -1,4 +1,4 @@
-import type { Member, PosGroup, QuarterSquad, SquadData } from "./types";
+import type { Member, PosGroup, QuarterSquad, SquadData, SquadSlotAssign } from "./types";
 import { POS_SHORT } from "./types";
 
 export const QUARTER_COUNT = 4;
@@ -460,16 +460,38 @@ export function squadPlayCounts(squad: SquadData): Map<number, number> {
   return counts;
 }
 
-/** 쿼터별 내 자리 — ["CB", "휴식", "LB 전반", "CB"] 같은 목록. */
+/**
+ * 쿼터별 내 자리 — ["CB", "휴식", "LB 전반", "LB 전반→ST 후반"] 같은 목록. 한 쿼터에서
+ * 전반과 후반을 서로 다른 자리에서 뛰면 "전반 자리→후반 자리"로 이어서 적는다.
+ */
 export function memberQuarterRoles(squad: SquadData, memberId: number): string[] {
   return squad.quarters.map((q) => {
+    const first: string[] = [];
+    const second: string[] = [];
     for (const s of q.starters) {
       const label = FORMATION_SLOTS.find((d) => d.id === s.slotId)?.label ?? s.slotId;
-      if (s.memberId === memberId) return s.memberId2 !== undefined ? `${label} 전반` : label;
-      if (s.memberId2 === memberId) return `${label} 후반`;
+      if (s.memberId === memberId) {
+        if (s.memberId2 !== undefined) first.push(`${label} 전반`);
+        else first.push(label);
+      }
+      if (s.memberId2 === memberId) second.push(`${label} 후반`);
     }
-    return "휴식";
+    const parts = [...first, ...second];
+    return parts.length ? parts.join("→") : "휴식";
   });
+}
+
+/** 한 쿼터에서 그 선수가 들어 있는 모든 칸(전반·후반을 따로 뛰면 두 칸). */
+export function memberSlotsInQuarter(
+  starters: SquadSlotAssign[],
+  memberId: number
+): { slot: SquadSlotAssign; half: "full" | "first" | "second" }[] {
+  const out: { slot: SquadSlotAssign; half: "full" | "first" | "second" }[] = [];
+  for (const s of starters) {
+    if (s.memberId === memberId) out.push({ slot: s, half: s.memberId2 !== undefined ? "first" : "full" });
+    if (s.memberId2 === memberId) out.push({ slot: s, half: "second" });
+  }
+  return out.sort((a, b) => (a.half === "second" ? 1 : 0) - (b.half === "second" ? 1 : 0));
 }
 
 /**

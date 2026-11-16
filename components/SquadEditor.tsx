@@ -10,6 +10,7 @@ import {
   fillEmptySlots,
   FORMATION_SLOTS,
   memberQuarterRoles,
+  memberSlotsInQuarter,
   SLOT_CATEGORY_COLORS,
   SQUAD_APPROVAL_THRESHOLD,
   slotFit,
@@ -136,18 +137,34 @@ export default function SquadEditor({
   };
 
   // ---------- 조작 ----------
-  const clearElsewhere = (starters: SquadSlotAssign[], mid: number) =>
-    starters.map((s) => ({
-      ...s,
-      memberId: s.memberId === mid ? null : s.memberId,
-      ...(s.memberId2 !== undefined ? { memberId2: s.memberId2 === mid ? null : s.memberId2 } : {}),
-    }));
+  // 선수를 넣기 전에, 같은 시간대에 이미 다른 자리에 있는 그 선수를 뺀다. 안 나눈 자리는
+  // 전·후반 전체를 차지하고 나눈 자리는 칸마다 반쪽이라, 전반만 놓을 때는 후반 칸에 있는
+  // 그 선수는 그대로 둔다(전반은 A자리, 후반은 B자리에서 뛰는 교체를 만들 수 있게).
+  // 놓는 자리 자체는 두 칸 모두에서 뺀다(같은 자리 전·후반에 한 사람이 겹치지 않게).
+  const clearConflicts = (starters: SquadSlotAssign[], mid: number, slotId: string, half: Half) =>
+    starters.map((s) => {
+      if (s.slotId === slotId) {
+        return {
+          ...s,
+          memberId: s.memberId === mid ? null : s.memberId,
+          ...(s.memberId2 !== undefined ? { memberId2: s.memberId2 === mid ? null : s.memberId2 } : {}),
+        };
+      }
+      if (s.memberId2 === undefined) {
+        return { ...s, memberId: s.memberId === mid ? null : s.memberId };
+      }
+      return {
+        ...s,
+        memberId: s.memberId === mid && half !== "second" ? null : s.memberId,
+        memberId2: s.memberId2 === mid && half !== "first" ? null : s.memberId2,
+      };
+    });
 
   const putInto = (slotId: string, half: Half, mid: number) => {
     const a = assignOf(slotId);
     const out = half === "second" ? a?.memberId2 : a?.memberId;
     editQuarter((starters) => {
-      const next = clearElsewhere(starters, mid);
+      const next = clearConflicts(starters, mid, slotId, half);
       return next.map((s) => {
         if (s.slotId !== slotId) return s;
         return half === "second" ? { ...s, memberId2: mid } : { ...s, memberId: mid };
@@ -310,7 +327,26 @@ export default function SquadEditor({
 
   // ---------- 벤치 ----------
   const selSlot = sel?.t === "slot" ? sel.id : null;
-  const benchIds = [...q.bench].filter((id) => memberById.has(id));
+  // 나눈 자리의 한쪽 칸에만 있는 선수(전반만 또는 후반만 뛰는 중)는 반대쪽 칸에 넣을 수
+  // 있게 벤치 목록에도 함께 보여준다. 예: 전반에 LB로 뛰는 선수를 ST 후반에 넣기.
+  const partial = new Map<number, { half: "first" | "second"; where: string }>();
+  {
+    const occ = new Map<number, { first: boolean; second: boolean; where: string }>();
+    const mark = (id: number | null | undefined, first: boolean, second: boolean, slotId: string) => {
+      if (id == null) return;
+      const cur = occ.get(id) ?? { first: false, second: false, where: slotLabel(slotId) };
+      occ.set(id, { first: cur.first || first, second: cur.second || second, where: cur.where });
+    };
+    for (const s of q.starters) {
+      const split = s.memberId2 !== undefined;
+      mark(s.memberId, true, !split, s.slotId);
+      if (split) mark(s.memberId2, false, true, s.slotId);
+    }
+    for (const [id, o] of occ) {
+      if (o.first !== o.second) partial.set(id, { half: o.first ? "first" : "second", where: o.where });
+    }
+  }
+  const benchIds = [...q.bench, ...partial.keys()].filter((id) => memberById.has(id));
   benchIds.sort((a, b) => {
     if (selSlot) {
       const d = slotFit(selSlot, memberById.get(a)!) - slotFit(selSlot, memberById.get(b)!);
@@ -687,7 +723,7 @@ export default function SquadEditor({
             <p className="mb-2 text-xs font-extrabold text-zinc-600">
               {selSlot
                 ? `교체 후보 — ${slotLabel(selSlot)} 자리에 맞는 순서`
-                : `${qi + 1}쿼터 벤치 ${benchIds.length}명 — 출전 적은 순서`}
+                : `${qi + 1}쿼터 벤치 ${benchIds.length}명 — 출전 적은 순서${partial.size > 0 ? " (주황색은 전·후반 한쪽만 뛰는 선수)" : ""}`}
             </p>
             {benchIds.length === 0 ? (
               <p className="text-xs text-zinc-400">벤치에 남은 선수가 없어요.</p>
@@ -698,8 +734,10 @@ export default function SquadEditor({
                   const fit = selSlot ? slotFit(selSlot, m) : null;
                   const c = counts.get(id) ?? 0;
                   const isSel = sel?.t === "bench" && sel.mid === id;
-                  const sub =
-                    fit === 0
+                  const part = partial.get(id);
+                  const sub = part
+                    ? `${part.half === "first" ? "전반" : "후반"} ${part.where} 중 · ${fmtCount(c)}쿼터`
+                    : fit === 0
                       ? `추천 · ${fmtCount(c)}쿼터`
                       : fit === 1
                         ? `2순위 · ${fmtCount(c)}쿼터`
@@ -712,9 +750,11 @@ export default function SquadEditor({
                       className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl px-1 py-1.5 disabled:cursor-default ${
                         isSel
                           ? "bg-yellow-100 ring-2 ring-yellow-400"
-                          : fit === 0
-                            ? "bg-blue-100 ring-1 ring-blue-300"
-                            : "bg-white ring-1 ring-zinc-200"
+                          : part
+                            ? "bg-amber-50 ring-1 ring-amber-300"
+                            : fit === 0
+                              ? "bg-blue-100 ring-1 ring-blue-300"
+                              : "bg-white ring-1 ring-zinc-200"
                       }`}
                     >
                       <span className={`w-full truncate text-center text-sm font-bold ${myId === id ? "text-blue-700" : ""}`}>
@@ -722,7 +762,7 @@ export default function SquadEditor({
                       </span>
                       <span
                         className={`text-[10.5px] font-semibold ${
-                          fit === 0 ? "text-blue-700" : fit === 1 ? "text-indigo-700" : c <= 2 ? "text-amber-700" : "text-zinc-500"
+                          part ? "text-amber-700" : fit === 0 ? "text-blue-700" : fit === 1 ? "text-indigo-700" : c <= 2 ? "text-amber-700" : "text-zinc-500"
                         }`}
                       >
                         {sub}
@@ -754,12 +794,14 @@ export default function SquadEditor({
                     <span className="text-[10px] font-semibold text-zinc-400">{POS_SHORT[m.pos1]}</span>
                   </span>
                   {roles.map((r, i) => {
-                    const slot = squad.quarters[i].starters.find(
-                      (s) => s.memberId === m.id || s.memberId2 === m.id
-                    );
+                    const spots = memberSlotsInQuarter(squad.quarters[i].starters, m.id);
+                    const slot = spots[0]?.slot;
+                    const firstHalf = spots[0]?.half;
                     const cat = slot ? FORMATION_SLOTS.find((d) => d.id === slot.slotId)?.category : null;
                     const colors = cat ? SLOT_CATEGORY_COLORS[cat] : null;
-                    const half = r.endsWith("전반") ? "½" : r.endsWith("후반") ? "½" : "";
+                    const label = spots
+                      .map((p) => `${slotLabel(p.slot.slotId)}${p.half === "full" ? "" : "½"}`)
+                      .join("→");
                     return (
                       <button
                         key={i}
@@ -772,7 +814,7 @@ export default function SquadEditor({
                                 ? {
                                     t: "slot",
                                     id: slot.slotId,
-                                    half: slot.memberId2 === undefined ? "full" : slot.memberId2 === m.id ? "second" : "first",
+                                    half: firstHalf ?? "full",
                                   }
                                 : { t: "bench", mid: m.id }
                               : null
@@ -781,7 +823,7 @@ export default function SquadEditor({
                         aria-label={`${m.name} ${i + 1}쿼터 ${r}`}
                         className={`h-8 rounded-lg text-[10.5px] font-extrabold ${colors ? `${colors.bg} ${colors.text}` : "bg-white text-zinc-300 ring-1 ring-zinc-200"}`}
                       >
-                        {slot ? `${slotLabel(slot.slotId)}${half}` : "–"}
+                        {slot ? label : "–"}
                       </button>
                     );
                   })}
