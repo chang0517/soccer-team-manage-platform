@@ -140,7 +140,8 @@ export default function SquadEditor({
   // 선수를 넣기 전에, 같은 시간대에 이미 다른 자리에 있는 그 선수를 뺀다. 안 나눈 자리는
   // 전·후반 전체를 차지하고 나눈 자리는 칸마다 반쪽이라, 전반만 놓을 때는 후반 칸에 있는
   // 그 선수는 그대로 둔다(전반은 A자리, 후반은 B자리에서 뛰는 교체를 만들 수 있게).
-  // 놓는 자리 자체는 두 칸 모두에서 뺀다(같은 자리 전·후반에 한 사람이 겹치지 않게).
+  // 쿼터 전체를 뛰던 자리에 있던 선수를 한쪽 시간대에 놓으면 그 자리는 나머지 시간대만 뛰는
+  // 나눈 자리로 바뀐다. 놓는 자리 자체는 두 칸 모두에서 뺀다(같은 자리에 한 사람이 겹치지 않게).
   const clearConflicts = (starters: SquadSlotAssign[], mid: number, slotId: string, half: Half) =>
     starters.map((s) => {
       if (s.slotId === slotId) {
@@ -151,7 +152,12 @@ export default function SquadEditor({
         };
       }
       if (s.memberId2 === undefined) {
-        return { ...s, memberId: s.memberId === mid ? null : s.memberId };
+        if (s.memberId !== mid) return s;
+        // 쿼터 전체를 뛰던 자리: 다른 자리의 한쪽 시간대로 옮기면, 이 자리는 남은 시간대만 그
+        // 선수가 뛰는 나눈 자리가 된다(비는 시간대는 새 선수를 고르면 된다).
+        if (half === "first") return { ...s, memberId: null, memberId2: mid };
+        if (half === "second") return { ...s, memberId: mid, memberId2: null };
+        return { ...s, memberId: null };
       }
       return {
         ...s,
@@ -329,21 +335,36 @@ export default function SquadEditor({
   const selSlot = sel?.t === "slot" ? sel.id : null;
   // 나눈 자리의 한쪽 칸에만 있는 선수(전반만 또는 후반만 뛰는 중)는 반대쪽 칸에 넣을 수
   // 있게 벤치 목록에도 함께 보여준다. 예: 전반에 LB로 뛰는 선수를 ST 후반에 넣기.
-  const partial = new Map<number, { half: "first" | "second"; where: string }>();
+  // 전·후반 한 칸을 고른 상태에서는 쿼터 전체를 뛰는 선수도 후보로 보여준다(예: 전반에 LB를
+  // 뛰던 선수를 ST 후반으로 보내기 — LB는 그 선수가 전반만 뛰는 자리로 바뀐다).
+  const halfSelected = sel?.t === "slot" && sel.half !== "full";
+  const partial = new Map<number, { half: "first" | "second" | "full"; where: string }>();
   {
-    const occ = new Map<number, { first: boolean; second: boolean; where: string }>();
-    const mark = (id: number | null | undefined, first: boolean, second: boolean, slotId: string) => {
+    const occ = new Map<number, { first: boolean; second: boolean; full: boolean; where: string }>();
+    const mark = (
+      id: number | null | undefined,
+      first: boolean,
+      second: boolean,
+      slotId: string,
+      full: boolean
+    ) => {
       if (id == null) return;
-      const cur = occ.get(id) ?? { first: false, second: false, where: slotLabel(slotId) };
-      occ.set(id, { first: cur.first || first, second: cur.second || second, where: cur.where });
+      const cur = occ.get(id) ?? { first: false, second: false, full: false, where: slotLabel(slotId) };
+      occ.set(id, {
+        first: cur.first || first,
+        second: cur.second || second,
+        full: cur.full || full,
+        where: cur.where,
+      });
     };
     for (const s of q.starters) {
       const split = s.memberId2 !== undefined;
-      mark(s.memberId, true, !split, s.slotId);
-      if (split) mark(s.memberId2, false, true, s.slotId);
+      mark(s.memberId, true, !split, s.slotId, !split);
+      if (split) mark(s.memberId2, false, true, s.slotId, false);
     }
     for (const [id, o] of occ) {
       if (o.first !== o.second) partial.set(id, { half: o.first ? "first" : "second", where: o.where });
+      else if (halfSelected && o.full) partial.set(id, { half: "full", where: o.where });
     }
   }
   const benchIds = [...q.bench, ...partial.keys()].filter((id) => memberById.has(id));
@@ -723,7 +744,7 @@ export default function SquadEditor({
             <p className="mb-2 text-xs font-extrabold text-zinc-600">
               {selSlot
                 ? `교체 후보 — ${slotLabel(selSlot)} 자리에 맞는 순서`
-                : `${qi + 1}쿼터 벤치 ${benchIds.length}명 — 출전 적은 순서${partial.size > 0 ? " (주황색은 전·후반 한쪽만 뛰는 선수)" : ""}`}
+                : `${qi + 1}쿼터 벤치 ${benchIds.length}명 — 출전 적은 순서${partial.size > 0 ? " (주황색은 필드에서 뛰는 선수 — 눌러서 이 시간대로 옮겨요)" : ""}`}
             </p>
             {benchIds.length === 0 ? (
               <p className="text-xs text-zinc-400">벤치에 남은 선수가 없어요.</p>
@@ -736,7 +757,7 @@ export default function SquadEditor({
                   const isSel = sel?.t === "bench" && sel.mid === id;
                   const part = partial.get(id);
                   const sub = part
-                    ? `${part.half === "first" ? "전반" : "후반"} ${part.where} 중 · ${fmtCount(c)}쿼터`
+                    ? `${part.half === "full" ? "전체" : part.half === "first" ? "전반" : "후반"} ${part.where} 중 · ${fmtCount(c)}쿼터`
                     : fit === 0
                       ? `추천 · ${fmtCount(c)}쿼터`
                       : fit === 1
