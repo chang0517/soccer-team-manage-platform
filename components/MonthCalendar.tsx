@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { EventItem } from "@/lib/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+// 일정을 열었다가 돌아와도 보던 달이 그대로 남도록 이 브라우저 탭에 기억해 둔다(탭을
+// 닫으면 사라져서 다음에 새로 열면 이번 달부터 보인다).
+export const CALENDAR_MONTH_KEY = "schedule_calendar_month";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -25,6 +29,20 @@ export default function MonthCalendar({
   const [cursor, setCursor] = useState({ year, month: todayMonth - 1 });
   const [direction, setDirection] = useState(0);
 
+  // 돌아왔을 때 마지막에 보던 달로 복원한다. 서버에서 먼저 그려진 화면과 달라지면 안 되니
+  // 처음 그린 뒤에 읽어서 바꾼다.
+  useEffect(() => {
+    try {
+      const m = sessionStorage.getItem(CALENDAR_MONTH_KEY)?.match(/^(\d{4})-(\d{1,2})$/);
+      if (m && Number(m[2]) >= 0 && Number(m[2]) <= 11) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소(브라우저)는 첫 렌더 뒤에만 읽을 수 있다
+        setCursor({ year: Number(m[1]), month: Number(m[2]) });
+      }
+    } catch {
+      // 저장소를 못 쓰는 환경이면 이번 달부터
+    }
+  }, []);
+
   const eventsByDate = new Map<string, EventItem[]>();
   for (const e of events) {
     const list = eventsByDate.get(e.date) ?? [];
@@ -43,12 +61,20 @@ export default function MonthCalendar({
 
   const changeMonth = (delta: number) => {
     setDirection(delta);
-    setCursor((c) => {
-      const m = c.month + delta;
-      if (m < 0) return { year: c.year - 1, month: 11 };
-      if (m > 11) return { year: c.year + 1, month: 0 };
-      return { year: c.year, month: m };
-    });
+    const m = cursor.month + delta;
+    const next =
+      m < 0
+        ? { year: cursor.year - 1, month: 11 }
+        : m > 11
+          ? { year: cursor.year + 1, month: 0 }
+          : { year: cursor.year, month: m };
+    setCursor(next);
+    // 사용자가 직접 넘긴 달만 기억한다(처음 열 때의 이번 달로 덮어쓰지 않게).
+    try {
+      sessionStorage.setItem(CALENDAR_MONTH_KEY, `${next.year}-${next.month}`);
+    } catch {
+      // 저장소를 못 쓰면 기억만 못 할 뿐 달력은 그대로 동작한다
+    }
   };
 
   const isToday = (d: string) =>

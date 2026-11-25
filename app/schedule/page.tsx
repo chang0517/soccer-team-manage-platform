@@ -12,6 +12,7 @@ import { useSession } from "@/components/useSession";
 import { dDayLabel, formatDate, todayStr } from "@/lib/format";
 import type { EventItem } from "@/lib/types";
 
+const SELECTED_DATE_KEY = "schedule_selected_date";
 const EMPTY_FORM = {
   title: "정기 경기",
   type: "match",
@@ -30,6 +31,17 @@ export default function SchedulePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // 일정을 보고 돌아와도 고르던 날짜가 남게 복원한다(달력의 보던 달과 같은 방식).
+  useEffect(() => {
+    try {
+      const d = sessionStorage.getItem(SELECTED_DATE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소(브라우저)는 첫 렌더 뒤에만 읽을 수 있다
+      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setSelectedDate(d);
+    } catch {
+      // 저장소를 못 쓰는 환경이면 선택 없이 시작
+    }
+  }, []);
 
   const load = () =>
     fetch("/api/events")
@@ -226,7 +238,16 @@ export default function SchedulePage() {
         events={events}
         todayStr={todayStr()}
         selectedDate={selectedDate}
-        onSelectDate={(d) => setSelectedDate(d === selectedDate ? null : d)}
+        onSelectDate={(d) => {
+          const next = d === selectedDate ? null : d;
+          setSelectedDate(next);
+          try {
+            if (next) sessionStorage.setItem(SELECTED_DATE_KEY, next);
+            else sessionStorage.removeItem(SELECTED_DATE_KEY);
+          } catch {
+            // 저장소를 못 쓰면 돌아왔을 때 선택만 풀린다
+          }
+        }}
       />
 
       <AnimatePresence initial={false}>
